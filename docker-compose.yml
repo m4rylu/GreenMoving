@@ -1,0 +1,28 @@
+services:
+
+  station_1:
+    build: ./sensors/sensor-1
+    container_name: station_1
+    depends_on:
+      - mqtt_broker
+    networks:
+      green-network:
+        ipv4_address: 10.30.0.3
+
+  mqtt_broker:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto_broker
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    ports:
+      - "1883:1883"
+    networks:
+      green-network:
+        ipv4_address: 10.30.0.2
+
+networks:
+  green-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.30.0.0/16
