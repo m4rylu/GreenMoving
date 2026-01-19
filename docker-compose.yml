@@ -4,12 +4,12 @@ services:
     build: ./sensors/sensor-1
     container_name: station_1
     depends_on:
-      - mqtt_broker
+      - mqtt-broker
     networks:
       green-network:
         ipv4_address: 10.30.0.3
 
-  mqtt_broker:
+  mqtt-broker:
     image: eclipse-mosquitto:latest
     container_name: mosquitto_broker
     volumes:
@@ -20,9 +20,46 @@ services:
       green-network:
         ipv4_address: 10.30.0.2
 
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    depends_on:
+      - mqtt-broker
+      - influxdb
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    ports:
+      - '8125:8125'
+    networks:
+      green-network:
+        ipv4_address: 10.30.0.4
+
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminadmin
+      - DOCKER_INFLUXDB_INIT_ORG=GreenMoving
+      - DOCKER_INFLUXDB_INIT_BUCKET=bike_monitoring
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw==
+    volumes:
+      - ./influx_db:/var/lib/influxdb
+    networks:
+      green-network:
+        ipv4_address: 10.30.0.5
+
+
+volumes:
+  influx_db:
+
 networks:
   green-network:
     driver: bridge
     ipam:
       config:
         - subnet: 10.30.0.0/16
+

@@ -78,10 +78,13 @@ while True:
             print(f"   - Bici [{id_bici}]: {bici_in_carica[id_bici]}% (+{incremento}%)")
 
         data = {}
-        for bike, charge_level in bici_in_carica.items():
-            data[bike] = charge_level
 
-            message= json.dumps(data)
-            client.publish(broker_topic, message)
+        for bike_id, charge_level in bici_in_carica.items():
+            payload = {
+                "id": bike_id,
+                "level": charge_level,
+                }
+
+        client.publish(broker_topic, json.dumps(payload))
 
     time.sleep(time_interval)
