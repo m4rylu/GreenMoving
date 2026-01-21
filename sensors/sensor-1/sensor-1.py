@@ -83,6 +83,9 @@ while True:
             payload = {
                 "id": bike_id,
                 "level": charge_level,
+                "lat": 42.2109,
+                "long": 13.2407,
+                "state": "charging"
                 }
 
         client.publish(broker_topic, json.dumps(payload))
