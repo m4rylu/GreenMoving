@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrazione - Green Moving</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="card">
+        <h2>Crea Account</h2>
+        <p>Unisciti alla rivoluzione elettrica</p>
+        <form action="/register" method="POST">
+            <div class="input-group">
+                <label>Username</label>
+                <input type="text" name="username" placeholder="Scegli un nome" required>
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="Minimo 8 caratteri" required>
+            </div>
+            <button type="submit" class="btn">Registrati</button>
+        </form>
+        <div class="link-footer">
+            Hai già un account? <a href="/login">Accedi qui</a>
+        </div>
+    </div>
+</body>
+</html>

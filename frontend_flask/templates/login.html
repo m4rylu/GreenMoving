@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Green Moving</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="card">
+        <h2>Bentornato!</h2>
+        <p>Accedi per prenotare la tua e-bike</p>
+        <form action="/login" method="POST">
+            <div class="input-group">
+                <label>Username</label>
+                <input type="text" name="username" placeholder="Il tuo username" required>
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="La tua password" required>
+            </div>
+            <button type="submit" class="btn">Accedi</button>
+        </form>
+        <div class="link-footer">
+            Nuovo utente? <a href="/register">Registrati ora</a>
+        </div>
+    </div>
+</body>
+</html>

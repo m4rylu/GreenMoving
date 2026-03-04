@@ -1,13 +1,47 @@
 services:
 
-  station_1:
-    build: ./sensors/sensor-1
-    container_name: station_1
+  bike_1:
+    build: ./managed_resources/bikes
+    container_name: bike_1
+    environment:
+      - BIKE_ID=B1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
     depends_on:
       - mqtt-broker
     networks:
       green-network:
-        ipv4_address: 10.30.0.3
+        ipv4_address: 10.40.0.2
+
+  bike_2:
+    build: ./managed_resources/bikes
+    container_name: bike_2
+    environment:
+      - BIKE_ID=B2
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    depends_on:
+      - mqtt-broker
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.3
+
+  bike_3:
+    build: ./managed_resources/bikes
+    container_name: bike_3
+    environment:
+      - BIKE_ID=B3
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    depends_on:
+      - mqtt-broker
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.4
+
 
   mqtt-broker:
     image: eclipse-mosquitto:latest
@@ -18,21 +52,7 @@ services:
       - "1883:1883"
     networks:
       green-network:
-        ipv4_address: 10.30.0.2
-
-  telegraf:
-    image: telegraf:latest
-    container_name: telegraf
-    depends_on:
-      - mqtt-broker
-      - influxdb
-    volumes:
-      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-    ports:
-      - '8125:8125'
-    networks:
-      green-network:
-        ipv4_address: 10.30.0.4
+        ipv4_address: 10.40.0.5
 
   influxdb:
     image: influxdb:latest
@@ -47,10 +67,86 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=bike_monitoring
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw==
     volumes:
-      - ./influx_db:/var/lib/influxdb
+      - ./influx_db:/var/lib/influxdb2
     networks:
       green-network:
-        ipv4_address: 10.30.0.5
+        ipv4_address: 10.40.0.6
+
+  frontend_flask:
+    build: ./frontend_flask
+    container_name: frontend_flask
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "5000:5000"
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.7
+
+  postgres_sql:
+    container_name: postgres_sql
+    image: postgres:alpine
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=adminadmin
+      - POSTGRES_DB=static_db
+    volumes:
+      - ./postgres_sql/init:/docker-entrypoint-initdb.d
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.8
+
+  monitor:
+    build: ./monitor
+    container_name: monitor
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - influxdb
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.9
+
+  analysis:
+    build: ./analysis
+    container_name: analysis
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - influxdb
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.10
+
+  planning:
+    build: ./planning
+    container_name: planning
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - influxdb
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.11
+
+  executor:
+    build: ./executor
+    container_name: executor
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - influxdb
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.12
 
   grafana:
     image: grafana/grafana:latest
@@ -60,21 +156,19 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
-      - grafana:/var/lib/grafana
-      - ./grafana/provisioning/datasources/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       green-network:
-        ipv4_address: 10.30.0.50
-
+        ipv4_address: 10.40.0.13
 
 volumes:
-  influx_db:
-  grafana:
+  influxdb:
 
 networks:
   green-network:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.30.0.0/16
+        - subnet: 10.40.0.0/24
 
