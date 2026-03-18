@@ -9,3 +9,11 @@ CREATE TABLE available_bikes (
     minutes INTEGER NOT NULL,
     price INTEGER NOT NULL
 );
+
+CREATE TABLE stations_locations (
+    station_id VARCHAR(50) PRIMARY KEY,
+    lat_s FLOAT NOT NULL,
+    lon_s FLOAT NOT NULL,
+    address VARCHAR(200) NOT NULL,
+    total_power INTEGER NOT NULL
+);

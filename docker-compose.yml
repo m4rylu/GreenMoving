@@ -90,6 +90,8 @@ services:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=adminadmin
       - POSTGRES_DB=static_db
+    ports:
+      - "5432:5432"
     volumes:
       - ./postgres_sql/init:/docker-entrypoint-initdb.d
     networks:
@@ -155,12 +157,55 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - influxdb
+      - postgres_sql
     volumes:
       - ./grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       green-network:
         ipv4_address: 10.40.0.13
+
+  station_1:
+    build: ./managed_resources/charging_station
+    container_name: station_1
+    environment:
+      - STATION_ID=S1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    depends_on:
+      - mqtt-broker
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.14
+
+  knowledge:
+    build: ./knowledge
+    container_name: knowledge
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    depends_on:
+      - postgres_sql
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.15
+
+  operator:
+    build: ./managed_resources/simulated_operator
+    container_name: operator
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    depends_on:
+      - mqtt-broker
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.16
 
 volumes:
   influxdb:

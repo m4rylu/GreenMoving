@@ -55,6 +55,7 @@ class Bike:
             self.is_charging = True
             self.lat = payload.get("lat")
             self.lon = payload.get("lon")
+            self.charge_rate = 5
         #elif cmd == "BALANCE":
 
 

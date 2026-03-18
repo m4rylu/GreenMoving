@@ -24,7 +24,7 @@
         <div class="grid">
             {% for bike in bikes %}
             <div class="bike-card">
-                <div class="bike-id">Modello: {{ bike.bike_id }}</div>
+                <div class="bike-id">Bike ID: {{ bike.id }}</div>
                 <div class="info">⏳ Autonomia: <strong>{{ bike.minutes }} min</strong></div>
                 <div class="price">€ {{ bike.price }}</div>
                 <button class="rent-btn">Prenota Ora</button>

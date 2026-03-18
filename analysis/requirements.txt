@@ -1,1 +1,2 @@
 influxdb_client
+psycopg2-binary

@@ -13,3 +13,19 @@ datasources:
     secureJsonData:
       token: "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
     editable: true
+
+  - name: Postgres
+    type: postgres
+    url: postgres_sql:5432
+    user: admin
+    secureJsonData:
+      password: 'adminadmin'
+    jsonData:
+      database: static_db
+      sslmode: 'disable'
+      maxOpenConns: 100
+      maxIdleConns: 100
+      maxIdleConnsAuto: true
+      connMaxLifetime: 14400
+      postgresVersion: 903
+      timescaledb: false

@@ -1,6 +1,8 @@
 import time
 import configparser
 from datetime import timezone, datetime
+
+import psycopg2
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
@@ -23,16 +25,18 @@ MAX_LON = config.getfloat('coordinates', 'max_longitude')
 
 UPDATE_RATE = config.getint('update_rate', 'analysis_update_rate')
 
-stations={}
 bikes = {}
-bikes_history={}
-bikes_booked={}
+last_bike_analysis = {}
+
 end_time_bike_booked = {}
 last_processed_time_s = datetime.fromtimestamp(0, timezone.utc)
-last_processed_time = datetime.fromtimestamp(0, timezone.utc)
+last_time = datetime.fromtimestamp(0, timezone.utc)
+
+
 
 
 def retrieve_bike_telemetry():
+
     flux_query_bikes = f'''
     from(bucket: "{BUCKET}")
       |> range(start: -30d)
@@ -45,35 +49,76 @@ def retrieve_bike_telemetry():
     tables = query_api.query(query=flux_query_bikes, org=ORG)
     for table in tables:
         for record in table.records:
+
             bike_id = record.values.get("bike_id")
             battery = record.values.get("battery")
             locked = record.values.get("motor_locked")
             is_charging = record.values.get("is_charging")
             lat = record.values.get("lat")
             lon = record.values.get("lon")
-            active_alert = None
-            available_minutes = None
 
-            if (MIN_LAT > lat or MAX_LAT < lat) or (MIN_LON > lon or MAX_LON < lon):
-                    active_alert = "OUT_OF_RANGE"
+            if not locked:
+                active_alert = "BOOKED"
 
             elif battery >= AVAILABILITY_THRESHOLD and locked:
-                available_minutes= int(battery*2/100)
                 active_alert = "AVAILABLE"
 
             elif battery < AVAILABILITY_THRESHOLD and not is_charging:
                 active_alert = "LOW_BATTERY"
 
+            elif (MIN_LAT > lat or MAX_LAT < lat) or (MIN_LON > lon or MAX_LON < lon):
+                    active_alert = "OUT_OF_RANGE"
+            else:
+                active_alert = None
+
             if active_alert:
-                point = Point("bike_analysis") \
+                if last_bike_analysis.get(bike_id) != active_alert:
+                    print(f"Bike {bike_id} is {active_alert}")
+                    point = Point("bike_analysis") \
                          .tag("bike_id", bike_id) \
                          .field("event", active_alert)
 
-                if active_alert == "AVAILABLE" and available_minutes is not None:
-                    point.field("minutes", int(available_minutes))
+                    write_api.write(bucket=BUCKET, record=point)
+                last_bike_analysis[bike_id] = active_alert
 
-                write_api.write(bucket=BUCKET, record=point)
+def retrieve_station_status():
 
+    flux_query_bikes = f'''
+    from(bucket: "{BUCKET}")
+      |> range(start: -1d)
+      |> filter(fn: (r) => r["_measurement"] == "station")
+      |> last()
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+    '''
+
+    # STATION ANALYSIS
+    tables = query_api.query(query=flux_query_bikes, org=ORG)
+    for table in tables:
+        for record in table.records:
+            station = {}
+            station_id = record.values.get("station_id")
+            for i in range(1, N_SLOT+1):
+                station[f"s{i}"]=record.values.get(f"s{i}")
+
+            if all(s == "empty" for s in station.values()):
+                active_alert = "EMPTY STATION"
+                print("ricevuto alert empty")
+
+            elif all(s != "empty" for s in station.values()):
+                active_alert = "FULL STATION"
+                print ("ricevuto alert full")
+
+            else:
+                active_alert = None
+
+            if active_alert:
+                if last_bike_analysis.get(station_id) != active_alert:
+                    point = Point("station_analysis") \
+                         .tag("station_id", station_id) \
+                         .field("event", active_alert)
+
+                    write_api.write(bucket=BUCKET, record=point)
+                last_bike_analysis[station_id] = active_alert
 
 
 """
@@ -273,6 +318,7 @@ def bike_booked():
 
 def do_analysis():
     retrieve_bike_telemetry()
+    retrieve_station_status()
 
 
 if __name__ == "__main__":
@@ -281,6 +327,15 @@ if __name__ == "__main__":
     client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
     query_api = client.query_api()
     write_api = client.write_api(write_options=SYNCHRONOUS)
+
+    conn_params = {
+        "host": "postgres_sql",
+        "database": "static_db",
+        "user": "admin",
+        "password": "adminadmin"
+    }
+    conn=psycopg2.connect(**conn_params)
+    cur = conn.cursor()
 
     while True:
         do_analysis()

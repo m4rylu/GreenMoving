@@ -11,5 +11,4 @@ COPY bike.py .
 COPY bike_class.py .
 
 
-# Comando per avviare lo script
 CMD ["python", "bike.py"]

@@ -9,6 +9,7 @@ config = configparser.ConfigParser()
 config.read('configuration/config.ini')
 
 UPDATE_RATE = config.getint('update_rate', 'monitor_update_rate')
+N_SLOT = config.getint('system', 'n_slot_x_station')
 
 TOKEN = config.get('influx_db', 'token')
 ORG = config.get('influx_db', 'org')
@@ -29,12 +30,20 @@ stations = {}
 
 def send_data_bikes(payload, bike_id):
     point = Point("bikes") \
-        .tag("bike_id", bike_id) \
-        .field("battery", payload["battery"]) \
-        .field("motor_locked", payload["motor_locked"]) \
-        .field("is_charging", payload["is_charging"]) \
-        .field("lat", payload["lat"]) \
-        .field("lon", payload["lon"])
+        .tag("bike_id", bike_id)
+    for key, value in payload.items():
+        point.field(key, value)
+
+    write_api.write(bucket=BUCKET, record=point)
+
+def send_data_station(payload, station_id):
+    print(f"payload: {payload}")
+    point = Point("station") \
+            .tag("station_id", station_id)
+    for key, value in payload.items():
+        print(f"key: {key}")
+        print(f"value: {value}")
+        point.field(key, value["status"])
 
     write_api.write(bucket=BUCKET, record=point)
 
@@ -52,6 +61,11 @@ def on_message(client, userdata, msg):
         print("msg payload", msg.payload)
         bike_id = msg.topic.split("/")[2]
         send_data_bikes(payload["telemetry"], bike_id)
+    if topic[3] == "slots":
+        print("msg_topic", msg.topic)
+        print("msg payload", msg.payload)
+        station_id = msg.topic.split("/")[2]
+        send_data_station(payload["slots"], station_id)
 
 if __name__ == "__main__":
     time.sleep(7)

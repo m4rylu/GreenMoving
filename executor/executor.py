@@ -1,3 +1,5 @@
+import json
+
 import paho.mqtt.client as mqtt
 import psycopg2
 import time
@@ -27,51 +29,102 @@ UPDATE_RATE = config.getint('update_rate', 'executor_update_rate')
 STATION_COMMAND_TOPIC = config.get('mqtt_topics', 'station_command_topic')
 OPERATOR_TOPIC = config.get('mqtt_topics', 'operator_topic')
 
-last_processed_time= datetime.fromtimestamp(0, timezone.utc)
-last_processed_time_a= datetime.fromtimestamp(0, timezone.utc)
-last_processed_time_a1= datetime.fromtimestamp(0, timezone.utc)
-last_processed_time_e= datetime.fromtimestamp(0, timezone.utc)
-last_processed_time_bal= datetime.fromtimestamp(0, timezone.utc)
 last_time=datetime.fromtimestamp(0, timezone.utc)
+last_time_1=datetime.fromtimestamp(0, timezone.utc)
 
 def on_connect(client, userdata, flags, rc, properties=None):
     print("Connected with result code "+str(rc))
     client.subscribe(STATION_COMMAND_TOPIC)
 
+
 def retrieve_plan_data():
     global last_time
+
     flux_query = f'''
         from(bucket: "{BUCKET}")
-        |> range(start: -30d)
+        |> range(start: -1d) 
         |> filter(fn: (r) => r["_measurement"] == "plan_bikes")
         |> last()
-        |> sort(columns: ["_time"], desc: false)
         |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-        '''
+    '''
+
     tables = query_api.query(query=flux_query, org=ORG)
-    if tables:
-        record = tables[0].records[0]
-        if record.get_time() > last_time:
-            bike_id = record.values.get("bike_id")
-            minutes = record.values.get("minutes")
-            price = record.values.get("price")
-            print("bike_id", bike_id)
-            print("minutes", minutes)
-            print("price", price)
+    latest_time = last_time
 
-            sql_query = """
-                INSERT INTO available_bikes (id, minutes, price)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (id) 
-                DO UPDATE SET 
-                    minutes = EXCLUDED.minutes,
-                    price = EXCLUDED.price;
-                """
+    for table in tables:
+        for record in table.records:
+            record_time = record.get_time()
 
-            cur.execute(sql_query, (bike_id, minutes, price))
-            conn.commit()
+            if record_time > last_time:
+                bike_id = record.values.get("bike_id")
+                event = record.values.get("event")
 
-        last_time = record.get_time()
+                if event == "AVAILABLE":
+                    minutes = record.values.get("minutes")
+                    price = record.values.get("price")
+
+                    print(f"[EXECUTOR] Pubblico bici {bike_id}: {minutes} min a {price}€")
+
+                    sql_query = """
+                    INSERT INTO available_bikes (id, minutes, price)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (id) 
+                    DO UPDATE SET 
+                        minutes = EXCLUDED.minutes,
+                        price = EXCLUDED.price;
+                    """
+                    cur.execute(sql_query, (bike_id, minutes, price))
+                    conn.commit()
+
+                elif event == "NOT AVAILABLE":
+                    print(f"[EXECUTOR] Rimuovo bici {bike_id} perché non disponibile")
+
+                    sql_query = "DELETE FROM available_bikes WHERE id = %s;"
+                    cur.execute(sql_query, (bike_id,))
+                    conn.commit()
+
+                if record_time > latest_time:
+                    latest_time = record_time
+
+    last_time = latest_time
+
+def retrieve_bike_recharging():
+    global last_time_1
+
+    flux_query = f'''
+        from(bucket: "{BUCKET}")
+        |> range(start: -1d) 
+        |> filter(fn: (r) => r["_measurement"] == "plan_bikes")
+        |> last()
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+    '''
+
+    tables = query_api.query(query=flux_query, org=ORG)
+    latest_time = last_time_1
+
+    for table in tables:
+        for record in table.records:
+            record_time = record.get_time()
+
+            if record_time > last_time_1:
+                bike_id = record.values.get("bike_id")
+                station = record.values.get("station")
+                slot = record.values.get("slot")
+
+                payload = {
+                    "request": "CHARGE",
+                    "slot": slot,
+                    "bike_id": bike_id,
+                    "station_id": station,
+                }
+                # avvisa l'operatore
+                client_mqtt.publish(OPERATOR_TOPIC, json.dumps(payload))
+
+
+
+
+
+    last_time_1 = latest_time
 
 
 """
