@@ -211,7 +211,7 @@
             "uid": "P951FEA4DE68E13C5"
           },
           "hide": false,
-          "query": "import \"sql\"\r\n\r\n\r\nstazioni_info = sql.from(\r\n  driverName: \"postgres\",\r\n  dataSourceName: \"postgresql://admin:adminadmin@postgres_sql:5432/static_db?sslmode=disable\",\r\n  query: \"SELECT station_id, address, lat_s, lon_s FROM stations_locations\"\r\n)\r\n\r\n\r\nstazioni_status = from(bucket: \"bike_monitoring\")\r\n  |> range(start: v.timeRangeStart)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"station\")\r\n  |> last()\r\n  |> pivot(rowKey:[\"station_id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\r\n  |> group()\r\n\r\njoin(\r\n  tables: {info: stazioni_info, status: stazioni_status},\r\n  on: [\"station_id\"]\r\n)",
+          "query": "import \"sql\"\r\n\r\n\r\nstazioni_info = sql.from(\r\n  driverName: \"postgres\",\r\n  dataSourceName: \"postgresql://admin:adminadmin@postgres_sql:5432/static_db?sslmode=disable\",\r\n  query: \"SELECT station_id, address, lat_s, lon_s FROM stations_locations\"\r\n)\r\n\r\n\r\nstazioni_status = from(bucket: \"bike_monitoring\")\r\n  |> range(start: v.timeRangeStart)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"station\")\r\n  |> last()\r\n  |> pivot(rowKey:[\"station_id\", \"slot_id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\r\n  |> group()\r\n\r\ncombined_data = join(\r\n  tables: {info: stazioni_info, status: stazioni_status},\r\n  on: [\"station_id\"]\r\n)\r\n\r\ncombined_data\r\n  |> map(fn: (r) => ({\r\n      r with \r\n      lat_s: float(v: r.lat_s),\r\n      lon_s: float(v: r.lon_s)\r\n    }))",
           "refId": "B"
         }
       ],
@@ -233,5 +233,5 @@
   "timezone": "browser",
   "title": "Monitoring Dashboard",
   "uid": "addzrt4",
-  "version": 2
+  "version": 3
 }

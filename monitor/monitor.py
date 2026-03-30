@@ -25,6 +25,7 @@ STATION_TOPIC = config.get('mqtt_topics', 'station_topic')
 STATION_COMMAND_TOPIC = config.get('mqtt_topics', 'station_command_topic')
 STATION_EVENTS = config.get('mqtt_topics', 'station_events')
 
+
 bikes = {}
 stations = {}
 
@@ -38,14 +39,14 @@ def send_data_bikes(payload, bike_id):
 
 def send_data_station(payload, station_id):
     print(f"payload: {payload}")
-    point = Point("station") \
-            .tag("station_id", station_id)
     for key, value in payload.items():
-        print(f"key: {key}")
-        print(f"value: {value}")
-        point.field(key, value["status"])
+        point = Point("station") \
+        .tag("station_id", station_id) \
+        .tag("slot_id", key) \
+        .field(f"status", value["status"]) \
+        .field(f"rate", value["rate"])
 
-    write_api.write(bucket=BUCKET, record=point)
+        write_api.write(bucket=BUCKET, record=point)
 
 
 def on_connect(client, userdata, flags, rc, properties=None):

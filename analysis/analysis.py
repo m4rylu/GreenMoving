@@ -29,8 +29,8 @@ bikes = {}
 last_bike_analysis = {}
 
 end_time_bike_booked = {}
-last_processed_time_s = datetime.fromtimestamp(0, timezone.utc)
-last_time = datetime.fromtimestamp(0, timezone.utc)
+last_processed_time_s = datetime.now(timezone.utc)
+last_time = datetime.now(timezone.utc)
 
 
 
@@ -82,7 +82,6 @@ def retrieve_bike_telemetry():
                 last_bike_analysis[bike_id] = active_alert
 
 def retrieve_station_status():
-
     flux_query_bikes = f'''
     from(bucket: "{BUCKET}")
       |> range(start: -1d)
@@ -92,33 +91,40 @@ def retrieve_station_status():
     '''
 
     # STATION ANALYSIS
+    station = {}
     tables = query_api.query(query=flux_query_bikes, org=ORG)
     for table in tables:
         for record in table.records:
-            station = {}
             station_id = record.values.get("station_id")
-            for i in range(1, N_SLOT+1):
-                station[f"s{i}"]=record.values.get(f"s{i}")
+            slot_id = record.values.get("slot_id")
 
-            if all(s == "empty" for s in station.values()):
-                active_alert = "EMPTY STATION"
-                print("ricevuto alert empty")
+            if station_id not in station:
+                station[station_id] = {}
 
-            elif all(s != "empty" for s in station.values()):
-                active_alert = "FULL STATION"
-                print ("ricevuto alert full")
+            station[station_id][slot_id] = {
+                "status": record.values.get("status"),
+                "rate": record.values.get("rate")
+            }
 
-            else:
-                active_alert = None
+    for s_id , slot_ids in station.items():
 
-            if active_alert:
-                if last_bike_analysis.get(station_id) != active_alert:
-                    point = Point("station_analysis") \
-                         .tag("station_id", station_id) \
-                         .field("event", active_alert)
+        all_statuses = [data["status"] for data in slot_ids.values()]
 
-                    write_api.write(bucket=BUCKET, record=point)
-                last_bike_analysis[station_id] = active_alert
+        if all(s == "empty" for s in all_statuses):
+            active_alert = "EMPTY STATION"
+        elif all(s != "empty" for s in all_statuses):
+            active_alert = "FULL STATION"
+        else:
+            active_alert = "NORMAL"
+
+        if active_alert:
+            if last_bike_analysis.get(s_id) != active_alert:
+                point = Point("station_analysis") \
+                    .tag("station_id", s_id) \
+                    .field("event", active_alert)
+
+                write_api.write(bucket=BUCKET, record=point)
+            last_bike_analysis[s_id] = active_alert
 
 
 """

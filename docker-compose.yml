@@ -203,12 +203,14 @@ services:
       - ./configuration/config.ini:/app/configuration/config.ini
     depends_on:
       - mqtt-broker
+      - postgres_sql
     networks:
       green-network:
         ipv4_address: 10.40.0.16
 
 volumes:
   influxdb:
+  grafana:
 
 networks:
   green-network:

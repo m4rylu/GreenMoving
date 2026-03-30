@@ -18,6 +18,7 @@ MIN_LAT = config.getfloat('coordinates', 'min_latitude')
 MAX_LON = config.getfloat('coordinates', 'max_longitude')
 MIN_LON = config.getfloat('coordinates', 'min_longitude')
 
+
 class Bike:
     def __init__(self, bike_id:str):
         self.id = bike_id
@@ -42,6 +43,7 @@ class Bike:
     def on_connect(self, client, userdata, flags, rc):
         print("Connected with result code " + str(rc))
         client.subscribe(self.command_topic)
+        client.subscribe(f"ebike/bikes/{self.id}/commands")
 
     def on_message(self, client, userdata, msg):
         payload = json.loads(msg.payload.decode())
@@ -52,9 +54,11 @@ class Bike:
         elif cmd == "LOCK":
             self.actuator_lock(True)
         elif cmd == "CHARGE":
+            print("payload lat:", payload.get("lat"))
+            print("payload lon:", payload.get("lon"))
             self.is_charging = True
-            self.lat = payload.get("lat")
-            self.lon = payload.get("lon")
+            self.lat = float(payload.get("lat"))
+            self.lon = float(payload.get("lon"))
             self.charge_rate = 5
         #elif cmd == "BALANCE":
 
@@ -73,7 +77,7 @@ class Bike:
 
     def sensor_battery(self):
         if self.is_charging:
-            self.battery += self.charge_rate
+            self.battery = min(self.battery + self.charge_rate, 100)
         elif not self.locked:
             self.battery = max(0, self.battery - 5) # in uso
         elif self.locked:

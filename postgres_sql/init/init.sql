@@ -12,8 +12,8 @@ CREATE TABLE available_bikes (
 
 CREATE TABLE stations_locations (
     station_id VARCHAR(50) PRIMARY KEY,
-    lat_s FLOAT NOT NULL,
-    lon_s FLOAT NOT NULL,
+    lat_s NUMERIC(6,4) NOT NULL,
+    lon_s NUMERIC(6,4) NOT NULL,
     address VARCHAR(200) NOT NULL,
     total_power INTEGER NOT NULL
 );

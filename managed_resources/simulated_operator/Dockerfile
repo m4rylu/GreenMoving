@@ -7,6 +7,6 @@ RUN pip install --no-cache-dir --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY operator.py .
+COPY bike_operator.py .
 
-CMD ["python", "operator.py"]
+CMD ["python", "bike_operator.py"]
