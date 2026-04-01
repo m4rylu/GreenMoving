@@ -35,18 +35,18 @@ cur.execute("SELECT station_id, lat_s, lon_s, address, total_power FROM stations
 rows = cur.fetchall()
 
 for row in rows:
-   s_id = row[0]
 
-   if s_id not in station_loc:
-       station_loc[s_id] = {}
+    s_id = row[0]
+    if s_id not in station_loc:
+        station_loc[s_id] = {}
 
-   station_loc[s_id] = {
-       "lat": f"{row[1]:.4f}",
-       "lon": f"{row[2]:.4f}",
-       "address": row[3],
-       "total_power": row[4]
-   }
-   print(f"station {s_id} has lat: {station_loc[s_id]['lat']} and lon: {station_loc[s_id]['lon']}")
+    station_loc[s_id] = {
+        "lat": f"{row[1]:.4f}",
+        "lon": f"{row[2]:.4f}",
+        "address": row[3],
+        "total_power": row[4]
+    }
+    print(f"station {s_id} has lat: {station_loc[s_id]['lat']} and lon: {station_loc[s_id]['lon']}")
 cur.close()
 
 
