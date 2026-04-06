@@ -18,17 +18,19 @@ class ChargingStation:
         self.slots = {}
 
         for i in range(1,N_SLOT+1):
-            self.slots[f"s{i}"] = {"status": "empty", "rate": 0}
+            self.slots[f"s{i}"] = {"status": "empty", "rate": 0.0}
+
+        self.topic_request = f"ebike/stations/{self.id}/request"
+        self.topic_status = f"ebike/stations/{self.id}/slots"
 
         # Setup Client Unico
         self.client = mqtt.Client(client_id=self.id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+
         self.client.connect(HOST, PORT, 60)
         self.client.loop_start()
 
-        self.topic_request = f"ebike/stations/{self.id}/request"
-        self.topic_status = f"ebike/stations/{self.id}/slots"
 
     def send_slots(self):
         payload = {
@@ -47,7 +49,14 @@ class ChargingStation:
         slot_id = payload["slot"]
         #if type_request == "DISCONNECT":
         if type_request == "CONNECT":
+            b = payload["bike_id"]
+            print(f" AAAAAAAAAAA received request to connect {b} to slot {slot_id}")
             self.slots[slot_id]["status"] = payload["bike_id"]
-        #elif type_request == "RESERVED":
-        #elif type_request == "BALANCE":
+        elif type_request == "BALANCE":
+            slot = payload["slot"]
+            rate = payload["rate"]
+            print(f" BBBBBBBBBBBBBB ricevuto rate {rate} per slot {slot}")
+            self.slots[slot]["rate"] = payload["rate"]
+
+
 

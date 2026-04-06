@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 config = configparser.ConfigParser()
 config.read('configuration/config.ini')
 
+N_SLOT = config.getint('system', 'n_slot_x_station')
 TOKEN = config.get('influx_db', 'token')
 ORG = config.get('influx_db', 'org')
 BUCKET = config.get('influx_db', 'bucket')
@@ -31,6 +32,7 @@ OPERATOR_TOPIC = config.get('mqtt_topics', 'operator_topic')
 
 last_time=datetime.now(timezone.utc)
 last_time_1=datetime.now(timezone.utc)
+last_time_2=datetime.now(timezone.utc)
 
 def on_connect(client, userdata, flags, rc, properties=None):
     print("Connected with result code "+str(rc))
@@ -118,7 +120,7 @@ def retrieve_bike_recharging():
                     "station_id": station,
                 }
                 print(f"BIKE_ID {bike_id}")
-                # avvisa l'operatore
+
                 client_mqtt.publish(OPERATOR_TOPIC, json.dumps(payload))
                 print(f"mando richiesta operatore di ricaricare {bike_id} in {station} at {slot}")
 
@@ -127,11 +129,50 @@ def retrieve_bike_recharging():
 
     last_time_1 = latest_time
 
+def retrieve_station_rate():
+    global last_time_2
+
+    flux_query = f'''
+        from(bucket: "{BUCKET}")
+        |> range(start: -1d) 
+        |> filter(fn: (r) => r["_measurement"] == "plan_station_rate")
+        |> last()
+        |> drop(columns: ["_start", "_stop", "_measurement"])
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+    '''
+
+    tables = query_api.query(query=flux_query, org=ORG)
+    latest_time = last_time_2
+
+    for table in tables:
+        for record in table.records:
+            record_time = record.get_time()
+
+            if record_time > last_time_2:
+                station = record.values.get("station")
+                for key, value in record.values.items():
+                    if (key != "station" and key !="_time" and key !="result" and key != "table") and value is not None:
+
+                        payload = {
+                        "request": "BALANCE",
+                        "slot": key,
+                        "rate": value,
+                        }
+
+                        client_mqtt.publish(f"ebike/stations/{station}/request", json.dumps(payload))
+                        print(f"mando richiesta di mandare corrente {value} allo slot {key}")
+
+                if record_time > latest_time:
+                    latest_time = record_time
+
+    last_time_2 = latest_time
+
 
 
 def execute():
     retrieve_plan_data()
     retrieve_bike_recharging()
+    retrieve_station_rate()
 
 if __name__ == "__main__":
 

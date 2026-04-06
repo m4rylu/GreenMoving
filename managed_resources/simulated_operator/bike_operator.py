@@ -21,7 +21,7 @@ OPERATOR_TOPIC = config.get('mqtt_topics', 'operator_topic')
 
 station_loc = {}
 
-time.sleep(4)
+time.sleep(5)
 
 conn = psycopg2.connect(
     host=SQL_HOST,
@@ -30,6 +30,16 @@ conn = psycopg2.connect(
     password=SQL_PASSWORD
 )
 cur = conn.cursor()
+
+while True:
+    cur.execute("SELECT COUNT(*) FROM stations_locations")
+    count = cur.fetchone()[0]
+    if count > 0:
+        print(f"DATABASE PRONTO: Trovate {count} stazioni.")
+        break
+    else:
+        print("DATABASE VUOTO o NON PRONTO: Attendo 2 secondi...")
+        time.sleep(2)
 
 cur.execute("SELECT station_id, lat_s, lon_s, address, total_power FROM stations_locations")
 rows = cur.fetchall()

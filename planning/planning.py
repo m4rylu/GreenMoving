@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-
 config = configparser.ConfigParser()
 config.read('configuration/config.ini')
 
@@ -17,6 +16,7 @@ URL = config.get('influx_db', 'url')
 N_SLOT = config.getint('system', 'n_slot_x_station')
 RESET_TASK_TIME = config.getint('system', 'reset_task_time')
 UPDATE_RATE = config.getint('update_rate', 'planning_update_rate')
+AVAILABILITY_THRESHOLD = config.getint('system', 'bike_availability_treshold')
 
 ANALYSIS_TOPIC = "mapek/analysis"
 HOST = "localhost"
@@ -24,11 +24,12 @@ PORT = 8086
 
 stations={}
 station_knowledge={}
+empty_stations=[]
 bikes_history={}
+bikes = {}
+
 last_time = datetime.now(timezone.utc)
 
-
-bikes = {}
 
 def plan_bike_recharging():
     global stations
@@ -99,6 +100,26 @@ def retrieve_station_status():
         print(f"station with key {s} has values {stations[s]}")
 
 
+def retrieve_empty_station():
+    global empty_stations
+    flux_query = f'''
+    from(bucket: "{BUCKET}")
+      |> range(start: -1d)
+      |> filter(fn: (r) => r["_measurement"] == "station_analysis")
+      |> last()
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+    '''
+    tables = query_api.query(query=flux_query, org=ORG)
+    empty_stations = []
+    for table in tables:
+        for record in table.records:
+            station_id = record.values.get("station_id")
+            event = record.values.get("event")
+
+            if event == "EMPTY STATION":
+                empty_stations.append(station_id)
+    print(f"empty station has values {empty_stations}")
+
 
 def retrieve_bike_analysis():
     global last_time
@@ -154,18 +175,64 @@ def retrieve_bike_analysis():
 
                     write_api.write(bucket=BUCKET, record=point)
 
-                    print(f"bike {bike_id} shuold be recharged at station {s} slot {sl}")
+                    print(f"bike {bike_id} should be recharged at station {s} slot {sl}")
 
                 if record_time > current_max_time:
                     current_max_time = record_time
 
                 last_time = current_max_time
 
+def plan_station_rate():
+    for station in stations:
+        if station in empty_stations:
+            continue
+
+        high_priority = []
+        low_priority = []
+        total_power = 5.0
+        station_to_update  = {slot:0.0 for slot in stations[station]}
+
+
+        for slot in stations[station]:
+            if stations[station][slot]["status"] == "empty" or stations[station][slot]["status"] == "RESERVED":
+                continue
+
+            bike_to_schedule = stations[station][slot]["status"]
+            if bikes[bike_to_schedule]["battery"] < 100:
+                if bikes[bike_to_schedule]["battery"] < AVAILABILITY_THRESHOLD:
+                    high_priority.append(slot)
+                else:
+                    low_priority.append(slot)
+
+            weight_high = 3
+            weight_low = 1
+
+            total_weight = (len(high_priority) * weight_high) + \
+                            (len(low_priority) * weight_low)
+
+            if total_weight > 0:
+                unit_rate = total_power / total_weight
+
+            for s in high_priority:
+                station_to_update[s] = round(unit_rate * weight_high, 2)
+
+            for s in low_priority:
+                station_to_update[s] = round(unit_rate * weight_low, 2)
+
+            print(f"Stazioneeeeeeeeeeeee {station}: {station_to_update}")
+
+            point = Point("plan_station_rate").tag("station", station)
+            for slot_name, rate_value in station_to_update.items():
+                point.field(slot_name, rate_value)
+            write_api.write(bucket=BUCKET, record=point)
+
 
 def do_planning():
     retrieve_bike_telemetry()
     retrieve_station_status()
+    retrieve_empty_station()
     retrieve_bike_analysis()
+    plan_station_rate()
 
 if __name__ == "__main__":
     time.sleep(10)
