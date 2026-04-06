@@ -57,9 +57,11 @@ class Bike:
             print("payload lat:", payload.get("lat"))
             print("payload lon:", payload.get("lon"))
             self.is_charging = True
+            self.charge_rate = 0
             self.lat = float(payload.get("lat"))
             self.lon = float(payload.get("lon"))
-        #elif cmd == "BALANCE":
+        elif cmd == "BALANCE":
+            self.charge_rate=payload.get("rate")
 
 
     def actuator_lock(self, b:bool):

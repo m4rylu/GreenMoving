@@ -18,7 +18,7 @@ class ChargingStation:
         self.slots = {}
 
         for i in range(1,N_SLOT+1):
-            self.slots[f"s{i}"] = {"status": "empty", "rate": 0.0}
+            self.slots[f"s{i}"] = {"status": "empty", "rate": 0}
 
         self.topic_request = f"ebike/stations/{self.id}/request"
         self.topic_status = f"ebike/stations/{self.id}/slots"
@@ -57,6 +57,16 @@ class ChargingStation:
             rate = payload["rate"]
             print(f" BBBBBBBBBBBBBB ricevuto rate {rate} per slot {slot}")
             self.slots[slot]["rate"] = payload["rate"]
+            # SIMULATION
+            # notify the charge rate to the bike but this should be done automatically
+            b = self.slots[slot]["status"]
+            topic_bikes = f"ebike/bikes/{b}/commands"
+            payload = {
+                "request": "BALANCE",
+                "rate": rate,
+            }
+            self.client.publish(topic_bikes, json.dumps(payload))
+
 
 
 

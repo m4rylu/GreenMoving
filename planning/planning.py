@@ -189,8 +189,8 @@ def plan_station_rate():
 
         high_priority = []
         low_priority = []
-        total_power = 5.0
-        station_to_update  = {slot:0.0 for slot in stations[station]}
+        total_power = 5
+        station_to_update  = {slot:0 for slot in stations[station]}
 
 
         for slot in stations[station]:
@@ -213,11 +213,11 @@ def plan_station_rate():
             if total_weight > 0:
                 unit_rate = total_power / total_weight
 
-            for s in high_priority:
-                station_to_update[s] = round(unit_rate * weight_high, 2)
+                for s in high_priority:
+                    station_to_update[s] = int(round(unit_rate * weight_high, 0))
 
-            for s in low_priority:
-                station_to_update[s] = round(unit_rate * weight_low, 2)
+                for s in low_priority:
+                    station_to_update[s] = int(round(unit_rate * weight_low, 0))
 
             print(f"Stazioneeeeeeeeeeeee {station}: {station_to_update}")
 
