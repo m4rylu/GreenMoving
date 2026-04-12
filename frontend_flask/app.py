@@ -3,16 +3,36 @@ from functools import wraps
 
 from flask import Flask, render_template, request, make_response, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+
+from influxdb_client import InfluxDBClient, Point
+from influxdb_client.client.write_api import SYNCHRONOUS
+
 from werkzeug.security import generate_password_hash, check_password_hash
+
 import os
 import jwt
 
-app = Flask(__name__)
-SECRET_KEY = 'una_chiave_segreta_molto_sicura'  # Necessaria per gestire i messaggi flash
 
+
+# InfluxDB configuration (aggiungere il riferimento al file config.ini)
+INFLUX_URL = "http://influxdb:8086"
+INFLUX_TOKEN = "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
+INFLUX_ORG = "GreenMoving"
+INFLUX_BUCKET = "bike_monitoring"
+
+influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+query_api = influx_client.query_api()
+write_api = influx_client.write_api(write_options=SYNCHRONOUS)
+
+app = Flask(__name__)
+SECRET_KEY = 'una_chiave_segreta_molto_sicura'
+
+# Postegres SQL configuration
 DB_URL = os.getenv('DATABASE_URL', 'postgresql://admin:adminadmin@postgres_sql:5432/static_db')
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# -- FUNCTION --
 
 db = SQLAlchemy(app)
 
@@ -34,6 +54,16 @@ def token_required(f):
     return decorated
 
 
+def log_reservation_to_influx(user_id, bike_id):
+    point = Point("bookings") \
+        .tag("user_id", user_id) \
+        .field("bike_id", bike_id)
+
+    write_api.write(bucket=INFLUX_BUCKET, record=point)
+
+
+
+# -- DB CLASS --
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -47,6 +77,9 @@ class AvailableBike(db.Model):
     id = db.Column(db.String(50), primary_key=True)
     minutes = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Integer, nullable=False)
+
+
+
 
 # -- ROUTES --
 
@@ -69,7 +102,7 @@ def register():
 
     return render_template('register.html')
 
-
+@app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -101,6 +134,14 @@ def dashboard(current_user_id):
     bikes = AvailableBike.query.all()
     user = User.query.get(current_user_id)
     return render_template('dashboard.html', bikes=bikes, username=user.username)
+
+
+@app.route('/reserve/<bike_id>', methods=['GET'])
+@token_required
+def reserve_bike(current_user_id, bike_id):
+    log_reservation_to_influx(current_user_id, bike_id)
+
+    return redirect(url_for('dashboard'))
 
 
 if __name__ == '__main__':

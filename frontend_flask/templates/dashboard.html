@@ -27,7 +27,9 @@
                 <div class="bike-id">Bike ID: {{ bike.id }}</div>
                 <div class="info">⏳ Autonomia: <strong>{{ bike.minutes }} min</strong></div>
                 <div class="price">€ {{ bike.price }}</div>
-                <button class="rent-btn">Prenota Ora</button>
+                <a href="{{ url_for('reserve_bike', bike_id=bike.id) }}" class="rent-btn">
+                    Prenota Ora
+                </a>
             </div>
             {% else %}
             <p style="text-align: center; grid-column: 1 / -1;">Al momento non ci sono bici cariche in zona.</p>

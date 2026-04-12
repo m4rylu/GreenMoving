@@ -1,7 +1,9 @@
 import time
 import configparser
+import psycopg2
 
 from datetime import datetime, timezone
+
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
@@ -22,14 +24,31 @@ ANALYSIS_TOPIC = "mapek/analysis"
 HOST = "localhost"
 PORT = 8086
 
+SQL_HOST = "postgres_sql"
+SQL_USER = "admin"
+SQL_DB = "static_db"
+SQL_PASSWORD = "adminadmin"
+
+time.sleep(10)
+
+conn = psycopg2.connect(
+        host=SQL_HOST,
+        database=SQL_DB,
+        user=SQL_USER,
+        password=SQL_PASSWORD
+    )
+cur = conn.cursor()
+
 stations={}
 station_knowledge={}
 empty_stations=[]
 bikes_history={}
 bikes = {}
+bookings = []
+
 
 last_time = datetime.now(timezone.utc)
-
+last_time_1 = datetime.now(timezone.utc)
 
 def plan_bike_recharging():
     global stations
@@ -99,7 +118,6 @@ def retrieve_station_status():
     for s in stations:
         print(f"station with key {s} has values {stations[s]}")
 
-
 def retrieve_empty_station():
     global empty_stations
     flux_query = f'''
@@ -123,6 +141,7 @@ def retrieve_empty_station():
 
 def retrieve_bike_analysis():
     global last_time
+    global bookings
     query = f'''
     from(bucket: "{BUCKET}")
     |> range(start: -1d)
@@ -153,18 +172,58 @@ def retrieve_bike_analysis():
                     write_api.write(bucket=BUCKET, record=point)
 
                 elif event=="BOOKED":
+                    s = None
+                    sl = None
+                    found = False
+
+                    for station in stations:
+                        for slot in stations[station]:
+                            if stations[station][slot]["status"] == bike_id:
+                                s = station
+                                sl = slot
+                                found = True
+                                break
+                        if found:
+                                break
+
+
+
                     print("received not available event")
                     point = Point("plan_bikes") \
                         .tag("bike_id", bike_id) \
-                        .field("event", "NOT AVAILABLE")
+                        .field("event", "BOOKED") \
+                        .field("station", s) \
+                        .field("slot", sl)
 
                     write_api.write(bucket=BUCKET, record=point)
+
+
+                    sql_query = """
+                    INSERT INTO rides (
+                        user_id, bike_id, start_time, end_time, start_lat, start_lon, 
+                        end_lat, end_lon, start_battery, status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    cur.execute(sql_query, (
+                        record.values.get("user_id"),
+                        bike_id,
+                        datetime.now(timezone.utc),
+                        None,
+                        bikes[bike_id]["lat"],
+                        bikes[bike_id]["lon"],
+                        None,
+                        None,
+                        bikes[bike_id]["battery"],
+                        "active"
+                    ))
+                    conn.commit()
 
                 elif event=="LOW_BATTERY":
                     print("received low battery event")
                     point = Point("plan_bikes") \
                         .tag("bike_id", bike_id) \
-                        .field("event", "NOT AVAILABLE")
+                        .field("event", "LOW_BATTERY")
                     write_api.write(bucket=BUCKET, record=point)
 
                     s, sl = plan_bike_recharging()

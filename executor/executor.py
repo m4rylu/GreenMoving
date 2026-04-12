@@ -78,12 +78,30 @@ def retrieve_plan_data():
                     cur.execute(sql_query, (bike_id, minutes, price))
                     conn.commit()
 
-                elif event == "NOT AVAILABLE":
+                elif event == "LOW_BATTERY":
                     print(f"[EXECUTOR] Rimuovo bici {bike_id} perché non disponibile")
 
                     sql_query = "DELETE FROM available_bikes WHERE id = %s;"
                     cur.execute(sql_query, (bike_id,))
                     conn.commit()
+
+                elif event == "BOOKED":
+                    payload = {
+                        "request": "UNLOCK",
+                        }
+                    client_mqtt.publish(f"ebike/bikes/{bike_id}/commands", json.dumps(payload))
+                    print(f"mando richiesta di sbloccare bici {bike_id}")
+
+                    s = record.values.get("station")
+                    sl = record.values.get("sl")
+
+                    payload = {
+                        "request" : "DISCONNECT",
+                        "slot" : sl
+                    }
+
+                    client_mqtt.publish(f"ebike/stations/{s}/request", json.dumps(payload))
+                    print(f"mando richiesta di disconnettere bici allo slot {sl}")
 
                 if record_time > latest_time:
                     latest_time = record_time

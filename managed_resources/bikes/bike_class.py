@@ -54,8 +54,6 @@ class Bike:
         elif cmd == "LOCK":
             self.actuator_lock(True)
         elif cmd == "CHARGE":
-            print("payload lat:", payload.get("lat"))
-            print("payload lon:", payload.get("lon"))
             self.is_charging = True
             self.charge_rate = 0
             self.lat = float(payload.get("lat"))
@@ -72,6 +70,8 @@ class Bike:
 
     def sensor_gps(self):
         if not self.locked:
+            # SIMULATION
+            # of human movement with bike
             self.lat += random.uniform(-0.001, 0.001)
             self.lon += random.uniform(-0.001, 0.001)
 

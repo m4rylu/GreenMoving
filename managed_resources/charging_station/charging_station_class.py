@@ -47,8 +47,11 @@ class ChargingStation:
         payload = json.loads(msg.payload.decode())
         type_request = payload["request"]
         slot_id = payload["slot"]
-        #if type_request == "DISCONNECT":
-        if type_request == "CONNECT":
+        if type_request == "DISCONNECT":
+            slot = payload["slot"]
+            self.slots[slot]["status"] = "empty"
+            self.slots[slot]["rate"] = 0
+        elif type_request == "CONNECT":
             b = payload["bike_id"]
             print(f" AAAAAAAAAAA received request to connect {b} to slot {slot_id}")
             self.slots[slot_id]["status"] = payload["bike_id"]

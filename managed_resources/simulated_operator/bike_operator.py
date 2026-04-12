@@ -5,6 +5,10 @@ import time
 import psycopg2
 import paho.mqtt.client as mqtt
 
+# SIMULATES
+# the human operator that see which bikes needs to be charged and take them from their location
+# into the best charging station selected from the system
+
 config = configparser.ConfigParser()
 config.read('configuration/config.ini')
 

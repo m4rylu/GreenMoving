@@ -27,16 +27,15 @@ UPDATE_RATE = config.getint('update_rate', 'analysis_update_rate')
 
 bikes = {}
 last_bike_analysis = {}
+bookings = []
 
-end_time_bike_booked = {}
-last_processed_time_s = datetime.now(timezone.utc)
 last_time = datetime.now(timezone.utc)
 
 
 
 
 def retrieve_bike_telemetry():
-
+    global bookings
     flux_query_bikes = f'''
     from(bucket: "{BUCKET}")
       |> range(start: -30d)
@@ -57,19 +56,23 @@ def retrieve_bike_telemetry():
             lat = record.values.get("lat")
             lon = record.values.get("lon")
 
-            if not locked:
-                active_alert = "BOOKED"
+            active_alert = None
+            user_id = None
 
-            elif battery >= AVAILABILITY_THRESHOLD and locked:
-                active_alert = "AVAILABLE"
+            if battery >= AVAILABILITY_THRESHOLD and locked:
+                booking_found = next((b for b in bookings if b[0] == bike_id), None)
+                if booking_found:
+                    active_alert = "BOOKED"
+                    user_id = booking_found[1]
+                else:
+                    active_alert = "AVAILABLE"
 
             elif battery < AVAILABILITY_THRESHOLD and not is_charging:
                 active_alert = "LOW_BATTERY"
 
             elif (MIN_LAT > lat or MAX_LAT < lat) or (MIN_LON > lon or MAX_LON < lon):
                     active_alert = "OUT_OF_RANGE"
-            else:
-                active_alert = None
+
 
             if active_alert:
                 if last_bike_analysis.get(bike_id) != active_alert:
@@ -78,7 +81,11 @@ def retrieve_bike_telemetry():
                          .tag("bike_id", bike_id) \
                          .field("event", active_alert)
 
+                    if user_id:
+                        point.field("user_id", user_id)
+
                     write_api.write(bucket=BUCKET, record=point)
+
                 last_bike_analysis[bike_id] = active_alert
 
 def retrieve_station_status():
@@ -125,6 +132,36 @@ def retrieve_station_status():
 
                 write_api.write(bucket=BUCKET, record=point)
             last_bike_analysis[s_id] = active_alert
+
+
+def retrieve_bookings():
+    global last_time
+    global bookings
+    current_max_time = last_time
+    flux_query_bikes = f'''
+        from(bucket: "{BUCKET}")
+          |> range(start: -1d)
+          |> filter(fn: (r) => r["_measurement"] == "bookings")
+          |> last()
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+
+    bookings = []
+    tables = query_api.query(query=flux_query_bikes, org=ORG)
+    for table in tables:
+        for record in table.records:
+            record_time = record.get_time()
+            if record_time > last_time:
+                user_id = record.values.get("user_id")
+                bike_id = record.values.get("bike_id")
+
+                if not any(bike[0] == bike_id for bike in bookings):
+                    bookings.append((bike_id,user_id))
+
+                if record_time > current_max_time:
+                    current_max_time = record_time
+
+                last_time = current_max_time
 
 
 """
@@ -323,8 +360,10 @@ def bike_booked():
 """
 
 def do_analysis():
+    retrieve_bookings()
     retrieve_bike_telemetry()
     retrieve_station_status()
+
 
 
 if __name__ == "__main__":
