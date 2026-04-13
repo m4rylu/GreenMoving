@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+    <div class="status-container">
+        <h2>Elaborazione richiesta per la bici {{ bike_id }}...</h2>
+        <div id="loader" class="loader"></div> <p id="status-text">Il sistema MAPE-K sta verificando la disponibilità...</p>
+    </div>
+
+    <script>
+
+        let secondsPassed = 0;
+        const maxWait = 15; // Smettiamo di sperare dopo 15 secondi
+
+    function pollDatabase() {
+        secondsPassed += 2;
+
+        if (secondsPassed > maxWait) {
+            window.location.href = "/dashboard?msg=rejected";
+            return;
+        }
+
+        fetch('/api/check_reservation/{{ bike_id }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "SUCCESS") {
+                    window.location.href = "/dashboard?msg=success";
+                } else {
+                    setTimeout(pollDatabase, 2000);
+                }
+            })
+            .catch(err => {
+                console.error("Errore nel polling:", err);
+                setTimeout(pollDatabase, 5000);
+            });
+        }
+
+pollDatabase();
+    </script>
+
+</body>
+</html>

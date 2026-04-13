@@ -4,6 +4,9 @@ CREATE TABLE users (
     password VARCHAR(200) NOT NULL
 );
 
+INSERT INTO users (username, password)
+VALUES ('m', 'pbkdf2:sha256:1000000$faDlBKlY2khSCuaY$a178f92924224403d54131dfb11837e07f273e3beadf2fa9b63d3430a09dcfbe');
+
 CREATE TABLE available_bikes (
     id VARCHAR(50) PRIMARY KEY,
     minutes INTEGER NOT NULL,

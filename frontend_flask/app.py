@@ -57,7 +57,8 @@ def token_required(f):
 def log_reservation_to_influx(user_id, bike_id):
     point = Point("bookings") \
         .tag("user_id", user_id) \
-        .field("bike_id", bike_id)
+        .tag("bike_id", bike_id) \
+        .field("val", 1)
 
     write_api.write(bucket=INFLUX_BUCKET, record=point)
 
@@ -82,25 +83,6 @@ class AvailableBike(db.Model):
 
 
 # -- ROUTES --
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        user = request.form.get('username')
-        pw = request.form.get('password')
-
-        # error user exists
-        if User.query.filter_by(username=user).first():
-            return "Errore: lo username esiste già!", 400
-
-        # new user
-        hashed_pw = generate_password_hash(pw, method='pbkdf2:sha256')
-        new_user = User(username=user, password=hashed_pw)
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect(url_for('login'))
-
-    return render_template('register.html')
 
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
@@ -128,6 +110,25 @@ def login():
 
     return render_template('login.html')
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        user = request.form.get('username')
+        pw = request.form.get('password')
+
+        # error user exists
+        if User.query.filter_by(username=user).first():
+            return "Errore: lo username esiste già!", 400
+
+        # new user
+        hashed_pw = generate_password_hash(pw, method='pbkdf2:sha256')
+        new_user = User(username=user, password=hashed_pw)
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
 @app.route('/dashboard', methods=['GET', 'POST'])
 @token_required
 def dashboard(current_user_id):
@@ -136,12 +137,58 @@ def dashboard(current_user_id):
     return render_template('dashboard.html', bikes=bikes, username=user.username)
 
 
+# --- AGGIUNGI O MODIFICA QUESTE ROTTE ---
+
 @app.route('/reserve/<bike_id>', methods=['GET'])
 @token_required
 def reserve_bike(current_user_id, bike_id):
     log_reservation_to_influx(current_user_id, bike_id)
 
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('my_bookings', pending_bike_id=bike_id))
+
+
+@app.route('/my-bookings')
+@token_required
+def my_bookings(current_user_id):
+    user = User.query.get(current_user_id)
+
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+    |> range(start: -1d)
+    |> filter(fn: (r) => r["_measurement"] == "bookings_completed")
+    |> filter(fn: (r) => r["user_id"] == "{current_user_id}")
+    |> sort(columns: ["_time"], desc: true)
+    '''
+    result = query_api.query(query)
+
+    confirmed_bookings = []
+    for table in result:
+        for record in table.records:
+            confirmed_bookings.append({
+                "bike_id": record.values.get("bike_id"),
+                "time": record.get_time()
+            })
+
+    pending = request.args.get('pending_bike_id')
+
+    return render_template('reservations.html',
+                           username=user.username,
+                           confirmed=confirmed_bookings,
+                           pending=pending)
+
+@app.route('/api/check_reservation/<bike_id>')
+@token_required # Aggiungiamo la protezione anche qui
+def check_reservation(current_user_id, bike_id):
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+    |> range(start: -1m)
+    |> filter(fn: (r) => r["_measurement"] == "bookings_completed")
+    |> filter(fn: (r) => r["bike_id"] == "{bike_id}")
+    |> filter(fn: (r) => r["user_id"] == "{current_user_id}")
+    |> last()
+    '''
+    result = query_api.query(query)
+    return {"status": "SUCCESS"} if any(table.records for table in result) else {"status": "WAITING"}
 
 
 if __name__ == '__main__':

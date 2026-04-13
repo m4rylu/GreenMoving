@@ -51,6 +51,7 @@ class Bike:
         print(f"RICEVUTO COMANDO: {cmd}")
         if cmd == "UNLOCK":
             self.actuator_lock(False)
+            self.is_charging = False
         elif cmd == "LOCK":
             self.actuator_lock(True)
         elif cmd == "CHARGE":
@@ -64,9 +65,6 @@ class Bike:
 
     def actuator_lock(self, b:bool):
         self.locked = b
-        if not b: 
-            self.is_charging = False
-
 
     def sensor_gps(self):
         if not self.locked:
@@ -75,18 +73,15 @@ class Bike:
             self.lat += random.uniform(-0.001, 0.001)
             self.lon += random.uniform(-0.001, 0.001)
 
-
     def sensor_battery(self):
         if self.is_charging:
             self.battery = min(self.battery + self.charge_rate, 100)
         elif not self.locked:
             self.battery = max(0, self.battery - 5) # in uso
+            if self.battery < BIKE_AVAILABILITY_TRESHOLD + 5:
+                self.locked = True
         elif self.locked:
             self.battery = max(0,self.battery - 1) # bloccata
-        
-
-    def sensor_current(self):
-        return
 
 
     def send_state(self):

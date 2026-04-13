@@ -88,7 +88,7 @@ def retrieve_bike_telemetry():
             is_charging = record.values.get("is_charging")
             lat = record.values.get("lat")
             lon = record.values.get("lon")
-            bikes[bike_id] = {"battery": battery, "locked": locked, "is_charging": is_charging}
+            bikes[bike_id] = {"battery": battery, "locked": locked, "is_charging": is_charging, "lat": lat, "lon": lon}
 
 def retrieve_station_status():
     global stations
@@ -172,8 +172,9 @@ def retrieve_bike_analysis():
                     write_api.write(bucket=BUCKET, record=point)
 
                 elif event=="BOOKED":
-                    s = None
-                    sl = None
+                    user_id = record.values.get("user_id")
+                    s = "empty"
+                    sl = "empty"
                     found = False
 
                     for station in stations:
@@ -184,16 +185,14 @@ def retrieve_bike_analysis():
                                 found = True
                                 break
                         if found:
-                                break
+                            break
 
-
-
-                    print("received not available event")
                     point = Point("plan_bikes") \
                         .tag("bike_id", bike_id) \
                         .field("event", "BOOKED") \
                         .field("station", s) \
-                        .field("slot", sl)
+                        .field("slot", sl) \
+                        .field("user_id", user_id)
 
                     write_api.write(bucket=BUCKET, record=point)
 

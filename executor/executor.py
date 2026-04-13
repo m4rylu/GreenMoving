@@ -86,6 +86,14 @@ def retrieve_plan_data():
                     conn.commit()
 
                 elif event == "BOOKED":
+                    user_id = record.values.get("user_id")
+                    point = Point("bookings_completed").tag("bike_id", bike_id).tag("user_id", user_id).field("event", "SUCCESS")
+                    write_api.write(bucket=BUCKET, record=point)
+
+                    sql_query = "DELETE FROM available_bikes WHERE id = %s;"
+                    cur.execute(sql_query, (bike_id,))
+                    conn.commit()
+
                     payload = {
                         "request": "UNLOCK",
                         }
@@ -93,15 +101,16 @@ def retrieve_plan_data():
                     print(f"mando richiesta di sbloccare bici {bike_id}")
 
                     s = record.values.get("station")
-                    sl = record.values.get("sl")
+                    sl = record.values.get("slot")
 
-                    payload = {
+                    if s != "empty" and sl != "empty":
+                        payload = {
                         "request" : "DISCONNECT",
                         "slot" : sl
-                    }
+                        }
 
-                    client_mqtt.publish(f"ebike/stations/{s}/request", json.dumps(payload))
-                    print(f"mando richiesta di disconnettere bici allo slot {sl}")
+                        client_mqtt.publish(f"ebike/stations/{s}/request", json.dumps(payload))
+                        print(f"mando richiesta di disconnettere bici allo slot {sl}")
 
                 if record_time > latest_time:
                     latest_time = record_time
