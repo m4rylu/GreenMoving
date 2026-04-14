@@ -42,7 +42,7 @@
         let timer = 0;
         function check() {
             timer += 2;
-            if (timer > 30) { window.location.href = "/dashboard?error=timeout"; return; }
+            if (timer > 60) { window.location.href = "/dashboard?error=timeout"; return; }
 
             fetch('/api/check_reservation/{{ pending }}')
                 .then(r => r.json())

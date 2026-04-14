@@ -202,7 +202,7 @@ def retrieve_bike_analysis():
                         user_id, bike_id, start_time, end_time, start_lat, start_lon, 
                         end_lat, end_lon, start_battery, status
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %S)
                     """
                     cur.execute(sql_query, (
                         record.values.get("user_id"),

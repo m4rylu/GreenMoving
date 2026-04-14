@@ -78,8 +78,8 @@ class Bike:
             self.battery = min(self.battery + self.charge_rate, 100)
         elif not self.locked:
             self.battery = max(0, self.battery - 5) # in uso
-            if self.battery < BIKE_AVAILABILITY_TRESHOLD + 5:
-                self.locked = True
+            #if self.battery < BIKE_AVAILABILITY_TRESHOLD + 5:
+                #self.locked = True
         elif self.locked:
             self.battery = max(0,self.battery - 1) # bloccata
 

@@ -56,9 +56,8 @@ def token_required(f):
 
 def log_reservation_to_influx(user_id, bike_id):
     point = Point("bookings") \
-        .tag("user_id", user_id) \
         .tag("bike_id", bike_id) \
-        .field("val", 1)
+        .field("user_id", str(user_id)) \
 
     write_api.write(bucket=INFLUX_BUCKET, record=point)
 
@@ -153,9 +152,10 @@ def my_bookings(current_user_id):
     user = User.query.get(current_user_id)
 
     query = f'''
-    from(bucket: "{INFLUX_BUCKET}")
+from(bucket: "{INFLUX_BUCKET}")
     |> range(start: -1d)
     |> filter(fn: (r) => r["_measurement"] == "bookings_completed")
+    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") 
     |> filter(fn: (r) => r["user_id"] == "{current_user_id}")
     |> sort(columns: ["_time"], desc: true)
     '''
@@ -180,9 +180,10 @@ def my_bookings(current_user_id):
 @token_required # Aggiungiamo la protezione anche qui
 def check_reservation(current_user_id, bike_id):
     query = f'''
-    from(bucket: "{INFLUX_BUCKET}")
-    |> range(start: -1m)
+from(bucket: "{INFLUX_BUCKET}")
+    |> range(start: -5)
     |> filter(fn: (r) => r["_measurement"] == "bookings_completed")
+    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") 
     |> filter(fn: (r) => r["bike_id"] == "{bike_id}")
     |> filter(fn: (r) => r["user_id"] == "{current_user_id}")
     |> last()

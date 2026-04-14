@@ -56,14 +56,14 @@ def retrieve_bike_telemetry():
             lat = record.values.get("lat")
             lon = record.values.get("lon")
 
-            active_alert = None
-            user_id = None
+            active_alert = "IN_USE"
+            user_id = "empty"
 
             if battery >= AVAILABILITY_THRESHOLD and locked:
                 booking_found = next((b for b in bookings if b[0] == bike_id), None)
                 if booking_found:
                     active_alert = "BOOKED"
-                    user_id = booking_found[1]
+                    user_id = str(booking_found[1])
                 else:
                     active_alert = "AVAILABLE"
 
@@ -79,10 +79,8 @@ def retrieve_bike_telemetry():
                     print(f"Bike {bike_id} is {active_alert}")
                     point = Point("bike_analysis") \
                          .tag("bike_id", bike_id) \
-                         .field("event", active_alert)
-
-                    if user_id:
-                        point.field("user_id", user_id)
+                         .field("event", active_alert) \
+                         .field("user_id", user_id)
 
                     write_api.write(bucket=BUCKET, record=point)
 
@@ -138,6 +136,9 @@ def retrieve_bookings():
     global last_time
     global bookings
     current_max_time = last_time
+    now = datetime.now(timezone.utc)
+
+    bookings = [b for b in bookings if (now - b[2]).total_seconds() < 120]
     flux_query_bikes = f'''
         from(bucket: "{BUCKET}")
           |> range(start: -1d)
@@ -146,7 +147,6 @@ def retrieve_bookings():
           |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
         '''
 
-    bookings = []
     tables = query_api.query(query=flux_query_bikes, org=ORG)
     for table in tables:
         for record in table.records:
@@ -156,12 +156,12 @@ def retrieve_bookings():
                 bike_id = record.values.get("bike_id")
 
                 if not any(bike[0] == bike_id for bike in bookings):
-                    bookings.append((bike_id,user_id))
+                    bookings.append((bike_id,user_id, record_time))
 
                 if record_time > current_max_time:
                     current_max_time = record_time
 
-                last_time = current_max_time
+    last_time = current_max_time
 
 def do_analysis():
     retrieve_bookings()
