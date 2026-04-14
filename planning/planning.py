@@ -67,8 +67,6 @@ def plan_bike_recharging():
             return stat, g
     return None, None
 
-
-
 def retrieve_bike_telemetry():
     query_bikes = f'''
         from(bucket: "{BUCKET}")
@@ -117,6 +115,37 @@ def retrieve_station_status():
             stations[station_id][slot_id]["rate"]=record.values.get(f"rate")
     for s in stations:
         print(f"station with key {s} has values {stations[s]}")
+
+def retrieve_bookings():
+    global last_time
+    global bookings
+    current_max_time = last_time
+    now = datetime.now(timezone.utc)
+
+    bookings = [b for b in bookings if (now - b[2]).total_seconds() < 120]
+    flux_query_bikes = f'''
+        from(bucket: "{BUCKET}")
+          |> range(start: -1d)
+          |> filter(fn: (r) => r["_measurement"] == "bookings")
+          |> last()
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+
+    tables = query_api.query(query=flux_query_bikes, org=ORG)
+    for table in tables:
+        for record in table.records:
+            record_time = record.get_time()
+            if record_time > last_time:
+                user_id = record.values.get("user_id")
+                bike_id = record.values.get("bike_id")
+
+                if not any(bike[0] == bike_id for bike in bookings):
+                    bookings.append((bike_id,user_id, record_time))
+
+                if record_time > current_max_time:
+                    current_max_time = record_time
+
+    last_time = current_max_time
 
 def retrieve_empty_station():
     global empty_stations
@@ -172,10 +201,15 @@ def retrieve_bike_analysis():
                     write_api.write(bucket=BUCKET, record=point)
 
                 elif event=="BOOKED":
-                    user_id = record.values.get("user_id")
+
                     s = "empty"
                     sl = "empty"
+                    user_id = "empty"
                     found = False
+
+                    for bike in bookings:
+                        if bike[0] == bike_id:
+                            user_id = bike[1]
 
                     for station in stations:
                         for slot in stations[station]:
@@ -202,10 +236,10 @@ def retrieve_bike_analysis():
                         user_id, bike_id, start_time, end_time, start_lat, start_lon, 
                         end_lat, end_lon, start_battery, status
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %S)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
                     cur.execute(sql_query, (
-                        record.values.get("user_id"),
+                        user_id,
                         bike_id,
                         datetime.now(timezone.utc),
                         None,
@@ -289,6 +323,7 @@ def do_planning():
     retrieve_bike_telemetry()
     retrieve_station_status()
     retrieve_empty_station()
+    retrieve_bookings()
     retrieve_bike_analysis()
     plan_station_rate()
 

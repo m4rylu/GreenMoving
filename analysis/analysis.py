@@ -57,13 +57,11 @@ def retrieve_bike_telemetry():
             lon = record.values.get("lon")
 
             active_alert = "IN_USE"
-            user_id = "empty"
 
             if battery >= AVAILABILITY_THRESHOLD and locked:
                 booking_found = next((b for b in bookings if b[0] == bike_id), None)
                 if booking_found:
                     active_alert = "BOOKED"
-                    user_id = str(booking_found[1])
                 else:
                     active_alert = "AVAILABLE"
 
@@ -74,17 +72,15 @@ def retrieve_bike_telemetry():
                     active_alert = "OUT_OF_RANGE"
 
 
-            if active_alert:
-                if last_bike_analysis.get(bike_id) != active_alert:
-                    print(f"Bike {bike_id} is {active_alert}")
-                    point = Point("bike_analysis") \
-                         .tag("bike_id", bike_id) \
-                         .field("event", active_alert) \
-                         .field("user_id", user_id)
+            if last_bike_analysis.get(bike_id) != active_alert:
+                print(f"Bike {bike_id} is {active_alert}")
+                point = Point("bike_analysis") \
+                        .tag("bike_id", bike_id) \
+                        .field("event", active_alert)
 
-                    write_api.write(bucket=BUCKET, record=point)
+                write_api.write(bucket=BUCKET, record=point)
 
-                last_bike_analysis[bike_id] = active_alert
+            last_bike_analysis[bike_id] = active_alert
 
 def retrieve_station_status():
     flux_query_bikes = f'''

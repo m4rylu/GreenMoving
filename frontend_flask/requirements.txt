@@ -1,7 +1,7 @@
 flask
 flask-sqlalchemy
-psycopg2-binary
+paho-mqtt
 werkzeug
 requests
 PyJWT
-influxdb_client
+psycopg2-binary

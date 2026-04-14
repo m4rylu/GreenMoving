@@ -79,6 +79,8 @@ services:
       - PYTHONUNBUFFERED=1
     ports:
       - "5000:5000"
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
     networks:
       green-network:
         ipv4_address: 10.40.0.7

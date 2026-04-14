@@ -20,11 +20,8 @@ HOST = config.get('mqtt', 'host')
 PORT = config.getint('mqtt', 'port')
 
 BIKE_TOPIC = config.get('mqtt_topics', 'bike_topic')
-BIKE_COMMAND_TOPIC = config.get('mqtt_topics', 'bike_command_topic')
 STATION_TOPIC = config.get('mqtt_topics', 'station_topic')
-STATION_COMMAND_TOPIC = config.get('mqtt_topics', 'station_command_topic')
-STATION_EVENTS = config.get('mqtt_topics', 'station_events')
-
+BOOKINGS_TOPIC = config.get('mqtt_topics', 'bookings_topic')
 
 bikes = {}
 stations = {}
@@ -48,25 +45,39 @@ def send_data_station(payload, station_id):
 
         write_api.write(bucket=BUCKET, record=point)
 
+def send_data_bookings(payload):
+    point = Point("bookings") \
+            .tag("bike_id", payload.get("bike_id")) \
+            .field("user_id", payload.get("user_id"))
+
+    write_api.write(bucket=BUCKET, record=point)
+
+
+
 
 def on_connect(client, userdata, flags, rc, properties=None):
     print("Connected with result code "+str(rc))
     client.subscribe(BIKE_TOPIC)
     client.subscribe(STATION_TOPIC)
+    client.subscribe(BOOKINGS_TOPIC)
 
 def on_message(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
     topic = msg.topic.split("/")
-    if topic[3] == "telemetry":
+    if topic[1] == "bikes":
         print("msg_topic", msg.topic)
         print("msg payload", msg.payload)
         bike_id = msg.topic.split("/")[2]
         send_data_bikes(payload["telemetry"], bike_id)
-    if topic[3] == "slots":
+    if topic[1] == "stations":
         print("msg_topic", msg.topic)
         print("msg payload", msg.payload)
         station_id = msg.topic.split("/")[2]
         send_data_station(payload["slots"], station_id)
+    if topic[1] == "bookings":
+        print("msg_topic", msg.topic)
+        print("msg payload", msg.payload)
+        send_data_bookings(payload)
 
 if __name__ == "__main__":
     time.sleep(7)

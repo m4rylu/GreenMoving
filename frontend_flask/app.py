@@ -1,28 +1,23 @@
-from datetime import datetime, timezone, timedelta
-from functools import wraps
-
-from flask import Flask, render_template, request, make_response, redirect, url_for
-from flask_sqlalchemy import SQLAlchemy
-
-from influxdb_client import InfluxDBClient, Point
-from influxdb_client.client.write_api import SYNCHRONOUS
-
-from werkzeug.security import generate_password_hash, check_password_hash
-
+import paho.mqtt.client as mqtt
+import json
 import os
 import jwt
+import configparser
+
+from datetime import datetime, timezone, timedelta
+from functools import wraps
+from flask import Flask, render_template, request, make_response, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
 
-# InfluxDB configuration (aggiungere il riferimento al file config.ini)
-INFLUX_URL = "http://influxdb:8086"
-INFLUX_TOKEN = "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
-INFLUX_ORG = "GreenMoving"
-INFLUX_BUCKET = "bike_monitoring"
-
-influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
-query_api = influx_client.query_api()
-write_api = influx_client.write_api(write_options=SYNCHRONOUS)
+#MQTT configuration
+MQTT_HOST = config.get('mqtt', 'host')
+MQTT_PORT = config.getint('mqtt', 'port')
+BOOKINGS_TOPIC = config.get('mqtt_topics', 'bookings_topic')
 
 app = Flask(__name__)
 SECRET_KEY = 'una_chiave_segreta_molto_sicura'
@@ -54,12 +49,18 @@ def token_required(f):
     return decorated
 
 
-def log_reservation_to_influx(user_id, bike_id):
-    point = Point("bookings") \
-        .tag("bike_id", bike_id) \
-        .field("user_id", str(user_id)) \
+def log_reservation_to_mqtt(user_id, bike_id):
+    payload = {
+        "user_id": str(user_id),
+        "bike_id": str(bike_id),
+    }
 
-    write_api.write(bucket=INFLUX_BUCKET, record=point)
+    # Client MQTT "usa e getta" per la pubblicazione
+    client = mqtt.Client()
+    client.connect(MQTT_HOST, MQTT_PORT, 60)
+    client.publish(BOOKINGS_TOPIC, json.dumps(payload))
+    client.disconnect()
+    print(f"📡 Messaggio MQTT inviato: {payload}")
 
 
 
@@ -78,7 +79,13 @@ class AvailableBike(db.Model):
     minutes = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Integer, nullable=False)
 
-
+class Ride(db.Model):
+    __tablename__ = 'rides'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(50), nullable=False)
+    bike_id = db.Column(db.String(50), nullable=False)
+    start_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    status = db.Column(db.String(20), default='active')
 
 
 # -- ROUTES --
@@ -141,7 +148,7 @@ def dashboard(current_user_id):
 @app.route('/reserve/<bike_id>', methods=['GET'])
 @token_required
 def reserve_bike(current_user_id, bike_id):
-    log_reservation_to_influx(current_user_id, bike_id)
+    log_reservation_to_mqtt(current_user_id, bike_id)
 
     return redirect(url_for('my_bookings', pending_bike_id=bike_id))
 
@@ -151,23 +158,18 @@ def reserve_bike(current_user_id, bike_id):
 def my_bookings(current_user_id):
     user = User.query.get(current_user_id)
 
-    query = f'''
-from(bucket: "{INFLUX_BUCKET}")
-    |> range(start: -1d)
-    |> filter(fn: (r) => r["_measurement"] == "bookings_completed")
-    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") 
-    |> filter(fn: (r) => r["user_id"] == "{current_user_id}")
-    |> sort(columns: ["_time"], desc: true)
-    '''
-    result = query_api.query(query)
+    # Prendiamo tutte le corse dell'utente ordinate dalla più recente
+    # Nota: forziamo str(current_user_id) per coerenza con la tabella VARCHAR
+    user_rides = Ride.query.filter_by(user_id=str(current_user_id))\
+                           .order_by(Ride.start_time.desc()).all()
 
     confirmed_bookings = []
-    for table in result:
-        for record in table.records:
-            confirmed_bookings.append({
-                "bike_id": record.values.get("bike_id"),
-                "time": record.get_time()
-            })
+    for r in user_rides:
+        confirmed_bookings.append({
+            "bike_id": r.bike_id,
+            "time": r.start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "status": r.status
+        })
 
     pending = request.args.get('pending_bike_id')
 
@@ -177,19 +179,19 @@ from(bucket: "{INFLUX_BUCKET}")
                            pending=pending)
 
 @app.route('/api/check_reservation/<bike_id>')
-@token_required # Aggiungiamo la protezione anche qui
+@token_required
 def check_reservation(current_user_id, bike_id):
-    query = f'''
-from(bucket: "{INFLUX_BUCKET}")
-    |> range(start: -5)
-    |> filter(fn: (r) => r["_measurement"] == "bookings_completed")
-    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value") 
-    |> filter(fn: (r) => r["bike_id"] == "{bike_id}")
-    |> filter(fn: (r) => r["user_id"] == "{current_user_id}")
-    |> last()
-    '''
-    result = query_api.query(query)
-    return {"status": "SUCCESS"} if any(table.records for table in result) else {"status": "WAITING"}
+    # Cerchiamo se esiste una corsa 'active' per questo utente e questa bici
+    ride = Ride.query.filter_by(
+        user_id=str(current_user_id),
+        bike_id=str(bike_id),
+        status='active'
+    ).first()
+
+    if ride:
+        return {"status": "SUCCESS"}
+    else:
+        return {"status": "WAITING"}
 
 
 if __name__ == '__main__':
