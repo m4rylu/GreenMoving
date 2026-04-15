@@ -87,7 +87,7 @@ def retrieve_plan_data():
 
                 elif event == "BOOKED":
                     user_id = record.values.get("user_id")
-                    point = Point("bookings_completed").tag("bike_id", bike_id).field("user_id", user_id).field("event", "SUCCESS")
+                    point = Point("bookings_completed").tag("bike_id", bike_id).field("user_id", user_id).field("event", "ACTIVE")
                     write_api.write(bucket=BUCKET, record=point)
 
                     sql_query = "DELETE FROM available_bikes WHERE id = %s;"

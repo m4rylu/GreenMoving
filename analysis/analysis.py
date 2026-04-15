@@ -27,6 +27,7 @@ UPDATE_RATE = config.getint('update_rate', 'analysis_update_rate')
 
 bikes = {}
 last_bike_analysis = {}
+stations = {}
 bookings = []
 
 last_time = datetime.now(timezone.utc)
@@ -35,7 +36,7 @@ last_time = datetime.now(timezone.utc)
 
 
 def retrieve_bike_telemetry():
-    global bookings
+    global bikes
     flux_query_bikes = f'''
     from(bucket: "{BUCKET}")
       |> range(start: -30d)
@@ -50,37 +51,48 @@ def retrieve_bike_telemetry():
         for record in table.records:
 
             bike_id = record.values.get("bike_id")
-            battery = record.values.get("battery")
-            locked = record.values.get("motor_locked")
-            is_charging = record.values.get("is_charging")
-            lat = record.values.get("lat")
-            lon = record.values.get("lon")
-
-            active_alert = "IN_USE"
-
-            if battery >= AVAILABILITY_THRESHOLD and locked:
-                booking_found = next((b for b in bookings if b[0] == bike_id), None)
-                if booking_found:
-                    active_alert = "BOOKED"
-                else:
-                    active_alert = "AVAILABLE"
-
-            elif battery < AVAILABILITY_THRESHOLD and not is_charging:
-                active_alert = "LOW_BATTERY"
-
-            elif (MIN_LAT > lat or MAX_LAT < lat) or (MIN_LON > lon or MAX_LON < lon):
-                    active_alert = "OUT_OF_RANGE"
+            bikes[bike_id] = {}
+            bikes[bike_id]["battery"] = record.values.get("battery")
+            bikes[bike_id]["locked"] = record.values.get("motor_locked")
+            bikes[bike_id]["is_charging"] = record.values.get("is_charging")
+            bikes[bike_id]["lat"] = record.values.get("lat")
+            bikes[bike_id]["lon"] = record.values.get("lon")
 
 
-            if last_bike_analysis.get(bike_id) != active_alert:
-                print(f"Bike {bike_id} is {active_alert}")
-                point = Point("bike_analysis") \
-                        .tag("bike_id", bike_id) \
-                        .field("event", active_alert)
 
-                write_api.write(bucket=BUCKET, record=point)
 
-            last_bike_analysis[bike_id] = active_alert
+
+def bikes_analyzer():
+    for bike in bikes:
+        active_alert = "OCCUPIED"
+
+        if bikes[bike]["battery"] >= AVAILABILITY_THRESHOLD and bikes[bike]["locked"]:
+            booking_found = next((b for b in bookings if b[0] == bike), None)
+
+            if booking_found:
+                active_alert = "BOOKED"
+                bookings.remove(booking_found)
+
+            else:
+                active_alert = "AVAILABLE"
+
+
+        elif bikes[bike]["battery"] < AVAILABILITY_THRESHOLD and not bikes[bike]["is_charging"]:
+            active_alert = "LOW_BATTERY"
+
+        elif (MIN_LAT > bikes[bike]["lat"] or MAX_LAT < bikes[bike]["lat"]) or (MIN_LON > bikes[bike]["lon"] or MAX_LON < bikes[bike]["lon"]):
+                active_alert = "OUT_OF_RANGE"
+
+
+        if last_bike_analysis.get(bike) != active_alert:
+            print(f"Bike {bike} is {active_alert}")
+            point = Point("bike_analysis") \
+                    .tag("bike_id", bike) \
+                    .field("event", active_alert)
+
+            write_api.write(bucket=BUCKET, record=point)
+
+        last_bike_analysis[bike] = active_alert
 
 def retrieve_station_status():
     flux_query_bikes = f'''
@@ -92,23 +104,25 @@ def retrieve_station_status():
     '''
 
     # STATION ANALYSIS
-    station = {}
+    global stations
     tables = query_api.query(query=flux_query_bikes, org=ORG)
     for table in tables:
         for record in table.records:
             station_id = record.values.get("station_id")
             slot_id = record.values.get("slot_id")
 
-            if station_id not in station:
-                station[station_id] = {}
+            if station_id not in stations:
+                stations[station_id] = {}
 
-            station[station_id][slot_id] = {
+            stations[station_id][slot_id] = {
                 "status": record.values.get("status"),
                 "rate": record.values.get("rate")
             }
 
-    for s_id , slot_ids in station.items():
+def station_analyzer():
+    global stations
 
+    for s_id , slot_ids in stations.items():
         all_statuses = [data["status"] for data in slot_ids.values()]
 
         if all(s == "empty" for s in all_statuses):
@@ -163,6 +177,8 @@ def do_analysis():
     retrieve_bookings()
     retrieve_bike_telemetry()
     retrieve_station_status()
+    bikes_analyzer()
+    station_analyzer()
 
 
 

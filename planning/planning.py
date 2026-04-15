@@ -41,6 +41,7 @@ cur = conn.cursor()
 
 stations={}
 station_knowledge={}
+bike_analysis = {}
 empty_stations=[]
 bikes_history={}
 bikes = {}
@@ -171,6 +172,10 @@ def retrieve_empty_station():
 def retrieve_bike_analysis():
     global last_time
     global bookings
+    global bike_analysis
+
+    bike_analysis = {}
+
     query = f'''
     from(bucket: "{BUCKET}")
     |> range(start: -1d)
@@ -188,91 +193,99 @@ def retrieve_bike_analysis():
             if record_time > last_time:
                 bike_id = record.values.get("bike_id")
                 event = record.values.get("event")
-                if event=="AVAILABLE":
-                    print("received available event")
-                    minutes = int(bikes[bike_id]["battery"] * 2)
-                    price = 20
-                    point = Point("plan_bikes") \
-                        .tag("bike_id", bike_id) \
-                        .field("event", "AVAILABLE") \
-                        .field("minutes", minutes) \
-                        .field("price", price)
-
-                    write_api.write(bucket=BUCKET, record=point)
-
-                elif event=="BOOKED":
-
-                    s = "empty"
-                    sl = "empty"
-                    user_id = "empty"
-                    found = False
-
-                    for bike in bookings:
-                        if bike[0] == bike_id:
-                            user_id = bike[1]
-
-                    for station in stations:
-                        for slot in stations[station]:
-                            if stations[station][slot]["status"] == bike_id:
-                                s = station
-                                sl = slot
-                                found = True
-                                break
-                        if found:
-                            break
-
-                    point = Point("plan_bikes") \
-                        .tag("bike_id", bike_id) \
-                        .field("event", "BOOKED") \
-                        .field("station", s) \
-                        .field("slot", sl) \
-                        .field("user_id", user_id)
-
-                    write_api.write(bucket=BUCKET, record=point)
-
-
-                    sql_query = """
-                    INSERT INTO rides (
-                        user_id, bike_id, start_time, end_time, start_lat, start_lon, 
-                        end_lat, end_lon, start_battery, status
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    cur.execute(sql_query, (
-                        user_id,
-                        bike_id,
-                        datetime.now(timezone.utc),
-                        None,
-                        bikes[bike_id]["lat"],
-                        bikes[bike_id]["lon"],
-                        None,
-                        None,
-                        bikes[bike_id]["battery"],
-                        "active"
-                    ))
-                    conn.commit()
-
-                elif event=="LOW_BATTERY":
-                    print("received low battery event")
-                    point = Point("plan_bikes") \
-                        .tag("bike_id", bike_id) \
-                        .field("event", "LOW_BATTERY")
-                    write_api.write(bucket=BUCKET, record=point)
-
-                    s, sl = plan_bike_recharging()
-                    point = Point("plan_bikes_recharging") \
-                        .tag("bike_id", bike_id) \
-                        .field("station", s) \
-                        .field("slot", sl) \
-
-                    write_api.write(bucket=BUCKET, record=point)
-
-                    print(f"bike {bike_id} should be recharged at station {s} slot {sl}")
+                bike_analysis[bike_id] = event
 
                 if record_time > current_max_time:
                     current_max_time = record_time
 
-                last_time = current_max_time
+        last_time = current_max_time
+
+def bikes_planner():
+    global bookings
+    global bike_analysis
+
+    for bike_id in bike_analysis:
+        event = bike_analysis[bike_id]
+
+        if event=="AVAILABLE":
+            print("received available event")
+            minutes = int(bikes[bike_id]["battery"] * 2)
+            price = 20
+            point = Point("plan_bikes") \
+                .tag("bike_id", bike_id) \
+                .field("event", "AVAILABLE") \
+                .field("minutes", minutes) \
+                .field("price", price)
+
+            write_api.write(bucket=BUCKET, record=point)
+
+        elif event=="BOOKED":
+            s, sl, user_id = "empty", "empty", "empty"
+            found = False
+
+            for bike in bookings:
+                if bike[0] == bike_id:
+                    user_id = bike[1]
+
+                for station in stations:
+                    for slot in stations[station]:
+                        if stations[station][slot]["status"] == bike_id:
+                            s = station
+                            sl = slot
+                            found = True
+                            break
+                    if found:
+                        break
+
+                point = Point("plan_bikes") \
+                    .tag("bike_id", bike_id) \
+                    .field("event", "BOOKED") \
+                    .field("station", s) \
+                    .field("slot", sl) \
+                    .field("user_id", user_id)
+
+                write_api.write(bucket=BUCKET, record=point)
+
+
+                sql_query = """
+                    INSERT INTO rides (
+                        user_id, bike_id, start_time, end_time, start_lat, start_lon, 
+                        end_lat, end_lon, start_battery, status
+                        )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                cur.execute(sql_query, (
+                    user_id,
+                    bike_id,
+                    datetime.now(timezone.utc),
+                    None,
+                    bikes[bike_id]["lat"],
+                    bikes[bike_id]["lon"],
+                    None,
+                    None,
+                    bikes[bike_id]["battery"],
+                    "active"
+                ))
+                conn.commit()
+
+        elif event=="LOW_BATTERY":
+            print("received low battery event")
+            point = Point("plan_bikes") \
+                .tag("bike_id", bike_id) \
+                .field("event", "LOW_BATTERY")
+            write_api.write(bucket=BUCKET, record=point)
+
+            s, sl = plan_bike_recharging()
+            point = Point("plan_bikes_recharging") \
+                .tag("bike_id", bike_id) \
+                .field("station", s) \
+                .field("slot", sl) \
+
+            write_api.write(bucket=BUCKET, record=point)
+
+            print(f"bike {bike_id} should be recharged at station {s} slot {sl}")
+
+
 
 def plan_station_rate():
     for station in stations:
@@ -325,6 +338,7 @@ def do_planning():
     retrieve_empty_station()
     retrieve_bookings()
     retrieve_bike_analysis()
+    bikes_planner()
     plan_station_rate()
 
 if __name__ == "__main__":
