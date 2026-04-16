@@ -28,7 +28,7 @@ UPDATE_RATE = config.getint('update_rate', 'analysis_update_rate')
 bikes = {}
 last_bike_analysis = {}
 stations = {}
-bookings = []
+bookings = {}
 
 last_time = datetime.now(timezone.utc)
 
@@ -59,40 +59,51 @@ def retrieve_bike_telemetry():
             bikes[bike_id]["lon"] = record.values.get("lon")
 
 
-
-
-
 def bikes_analyzer():
+    global bookings
     for bike in bikes:
         active_alert = "OCCUPIED"
 
-        if bikes[bike]["battery"] >= AVAILABILITY_THRESHOLD and bikes[bike]["locked"]:
-            booking_found = next((b for b in bookings if b[0] == bike), None)
+        battery = bikes[bike]["battery"]
+        is_locked = bikes[bike]["locked"]
+        is_charging = bikes[bike]["is_charging"]
+
+
+        if battery < AVAILABILITY_THRESHOLD and not is_charging:
+            if is_locked:
+                active_alert = "LOW_BATTERY"
+        elif (MIN_LAT > bikes[bike]["lat"] or MAX_LAT < bikes[bike]["lat"]) or \
+                (MIN_LON > bikes[bike]["lon"] or MAX_LON < bikes[bike]["lon"]):
+            active_alert = "OUT_OF_RANGE"
+
+        else:
+            booking_found = bookings.get(bike)
 
             if booking_found:
-                active_alert = "BOOKED"
-                bookings.remove(booking_found)
+                event_type = booking_found["event"]
+
+                if event_type == "BOOKED" and is_locked:
+                    active_alert = "BOOKED"
+
+                elif event_type == "END_RIDE":
+                    active_alert = "END_RIDE"
+                    bookings.pop(bike)
 
             else:
-                active_alert = "AVAILABLE"
-
-
-        elif bikes[bike]["battery"] < AVAILABILITY_THRESHOLD and not bikes[bike]["is_charging"]:
-            active_alert = "LOW_BATTERY"
-
-        elif (MIN_LAT > bikes[bike]["lat"] or MAX_LAT < bikes[bike]["lat"]) or (MIN_LON > bikes[bike]["lon"] or MAX_LON < bikes[bike]["lon"]):
-                active_alert = "OUT_OF_RANGE"
-
+                if is_locked:
+                    active_alert = "AVAILABLE"
+                else:
+                    active_alert = "OCCUPIED"
 
         if last_bike_analysis.get(bike) != active_alert:
-            print(f"Bike {bike} is {active_alert}")
+            print(f"🔔 Cambio Stato Bici {bike}: {active_alert}")
             point = Point("bike_analysis") \
-                    .tag("bike_id", bike) \
-                    .field("event", active_alert)
+                .tag("bike_id", bike) \
+                .field("event", active_alert)
 
             write_api.write(bucket=BUCKET, record=point)
+            last_bike_analysis[bike] = active_alert
 
-        last_bike_analysis[bike] = active_alert
 
 def retrieve_station_status():
     flux_query_bikes = f'''
@@ -146,9 +157,7 @@ def retrieve_bookings():
     global last_time
     global bookings
     current_max_time = last_time
-    now = datetime.now(timezone.utc)
 
-    bookings = [b for b in bookings if (now - b[2]).total_seconds() < 120]
     flux_query_bikes = f'''
         from(bucket: "{BUCKET}")
           |> range(start: -1d)
@@ -164,9 +173,13 @@ def retrieve_bookings():
             if record_time > last_time:
                 user_id = record.values.get("user_id")
                 bike_id = record.values.get("bike_id")
+                event = record.values.get("event")
 
-                if not any(bike[0] == bike_id for bike in bookings):
-                    bookings.append((bike_id,user_id, record_time))
+                bookings[bike_id] = {
+                    "user_id": user_id,
+                    "event": event,
+                    "time": record_time
+                }
 
                 if record_time > current_max_time:
                     current_max_time = record_time

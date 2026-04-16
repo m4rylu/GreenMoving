@@ -27,10 +27,5 @@ CREATE TABLE rides (
     bike_id VARCHAR(50) NOT NULL,
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP,
-    start_lat NUMERIC(9,6),
-    start_lon NUMERIC(9,6),
-    end_lat NUMERIC(9,6),
-    end_lon NUMERIC(9,6),
-    start_battery FLOAT,
-    status VARCHAR(20) DEFAULT 'active' -- 'active' o 'completed'
+    status VARCHAR(20) DEFAULT 'active'
 );

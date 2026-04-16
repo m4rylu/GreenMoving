@@ -48,7 +48,8 @@ def send_data_station(payload, station_id):
 def send_data_bookings(payload):
     point = Point("bookings") \
             .tag("bike_id", payload.get("bike_id")) \
-            .field("user_id", payload.get("user_id"))
+            .field("user_id", payload.get("user_id")) \
+            .field("event", payload.get("event"))
 
     write_api.write(bucket=BUCKET, record=point)
 

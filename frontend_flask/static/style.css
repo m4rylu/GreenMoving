@@ -26,6 +26,56 @@ body {
     border-top: 5px solid var(--primary-green);
 }
 
+/* La griglia principale */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
+
+.bike-card {
+    background: #fdfdfd;
+    border: 1px solid #eee; /* Invece di un'ombra pesante, usiamo un bordo sottile */
+    border-radius: 10px;
+    padding: 15px; /* Meno spazio interno */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Allinea a sinistra per un look più moderno */
+    text-align: left;
+    transition: transform 0.2s;
+}
+
+.bike-card:hover {
+    transform: translateY(-3px); /* Un leggero movimento quando ci passi sopra */
+    border-color: #3498db;
+}
+
+.bike-id {
+    font-size: 1rem;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.price {
+    font-size: 1.2rem;
+    color: var(dark-green);
+    font-weight: bold;
+    margin: 10px 0; /* Spazio equilibrato sopra e sotto */
+}
+
+.rent-btn {
+    margin-top: auto;
+    width: fit-content !important;
+    background-color: var(--primary-green);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
 h2 { color: var(--dark-green); margin-bottom: 1rem; }
 
 .input-group { text-align: left; margin-bottom: 1.5rem; }

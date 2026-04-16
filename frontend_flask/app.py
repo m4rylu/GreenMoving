@@ -53,6 +53,7 @@ def log_reservation_to_mqtt(user_id, bike_id):
     payload = {
         "user_id": str(user_id),
         "bike_id": str(bike_id),
+        "event": "BOOKED"
     }
 
     # Client MQTT "usa e getta" per la pubblicazione
@@ -61,6 +62,18 @@ def log_reservation_to_mqtt(user_id, bike_id):
     client.publish(BOOKINGS_TOPIC, json.dumps(payload))
     client.disconnect()
     print(f"📡 Messaggio MQTT inviato: {payload}")
+
+def request_end_ride_mqtt(bike_id, user_id):
+    payload = {
+        "user_id": str(user_id),
+        "bike_id": str(bike_id),
+        "event": "END_RIDE"
+    }
+    client = mqtt.Client()
+    client.connect(MQTT_HOST, MQTT_PORT, 60)
+    client.publish(BOOKINGS_TOPIC, json.dumps(payload))
+    client.disconnect()
+    print(f"🛑 Richiesta FINE CORSA inviata via MQTT: {payload}")
 
 
 
@@ -166,6 +179,7 @@ def my_bookings(current_user_id):
     confirmed_bookings = []
     for r in user_rides:
         confirmed_bookings.append({
+            "id": r.id,
             "bike_id": r.bike_id,
             "time": r.start_time.strftime("%Y-%m-%d %H:%M:%S"),
             "status": r.status
@@ -192,6 +206,19 @@ def check_reservation(current_user_id, bike_id):
         return {"status": "SUCCESS"}
     else:
         return {"status": "WAITING"}
+
+
+@app.route('/end-ride/<int:ride_id>')
+@token_required
+def end_ride(current_user_id, ride_id):
+    ride = Ride.query.filter_by(id=ride_id, user_id=str(current_user_id)).first()
+
+    if ride and ride.status == 'active':
+        request_end_ride_mqtt(ride.bike_id, current_user_id)
+
+        return redirect(url_for('my_bookings', msg="terminating"))
+
+    return redirect(url_for('my_bookings', error="invalid_ride"))
 
 
 if __name__ == '__main__':

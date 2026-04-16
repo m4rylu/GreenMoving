@@ -112,6 +112,21 @@ def retrieve_plan_data():
                         client_mqtt.publish(f"ebike/stations/{s}/request", json.dumps(payload))
                         print(f"mando richiesta di disconnettere bici allo slot {sl}")
 
+                elif event == "END_RIDE":
+                    user_id = record.values.get("user_id")
+                    point = Point("bookings_completed").tag("bike_id", bike_id).field("user_id", user_id).field("event", "COMPLETED")
+                    write_api.write(bucket=BUCKET, record=point)
+
+                    payload = {
+                        "request": "LOCK",
+                    }
+                    client_mqtt.publish(f"ebike/bikes/{bike_id}/commands", json.dumps(payload))
+                    print(f"mando richiesta di bloccare bici {bike_id}")
+
+
+
+
+
                 if record_time > latest_time:
                     latest_time = record_time
 

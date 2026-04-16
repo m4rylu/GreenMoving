@@ -121,9 +121,7 @@ def retrieve_bookings():
     global last_time
     global bookings
     current_max_time = last_time
-    now = datetime.now(timezone.utc)
 
-    bookings = [b for b in bookings if (now - b[2]).total_seconds() < 120]
     flux_query_bikes = f'''
         from(bucket: "{BUCKET}")
           |> range(start: -1d)
@@ -249,24 +247,42 @@ def bikes_planner():
 
                 sql_query = """
                     INSERT INTO rides (
-                        user_id, bike_id, start_time, end_time, start_lat, start_lon, 
-                        end_lat, end_lon, start_battery, status
+                        user_id, bike_id, start_time, end_time, status
                         )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                     """
                 cur.execute(sql_query, (
                     user_id,
                     bike_id,
                     datetime.now(timezone.utc),
                     None,
-                    bikes[bike_id]["lat"],
-                    bikes[bike_id]["lon"],
-                    None,
-                    None,
-                    bikes[bike_id]["battery"],
                     "active"
                 ))
                 conn.commit()
+
+        elif event == "END_RIDE":
+            for bike in bookings:
+                if bike[0] == bike_id:
+                    user_id = bike[1]
+                    break
+
+            point = Point("plan_bikes") \
+                .tag("bike_id", bike_id) \
+                .field("event", "END_RIDE") \
+                .field("user_id", user_id)
+
+            write_api.write(bucket=BUCKET, record=point)
+
+            sql_update_ride = """
+                    UPDATE rides 
+                    SET status = 'completed', 
+                        end_time = %s 
+                    WHERE bike_id = %s AND status = 'active';
+                """
+            cur.execute(sql_update_ride, (
+                datetime.now(timezone.utc),
+                bike_id))
+            conn.commit()
 
         elif event=="LOW_BATTERY":
             print("received low battery event")

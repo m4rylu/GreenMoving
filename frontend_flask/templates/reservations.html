@@ -25,14 +25,25 @@
 
         <h2>Corse Attive / Storico Recente</h2>
         <div class="list">
-            {% for b in confirmed %}
-            <div class="booking-card confirmed">
+        {% for b in confirmed %}
+            <div class="booking-card {% if b.status == 'active' %}active-ride{% else %}confirmed{% endif %}">
                 <strong>Bici ID: {{ b.bike_id }}</strong>
-                <p>Sbloccata alle: {{ b.time }}</p>
-                <button disabled>In Corsa...</button>
+                <p>Iniziata alle: {{ b.time }}</p>
+
+                {% if b.status == 'active' %}
+                    <div class="status-badge">🟢 In corso...</div>
+                    <a href="{{ url_for('end_ride', ride_id=b.id) }}"
+                    class="btn-end-ride"
+                    onclick="return confirm('Vuoi davvero terminare la corsa? La bici verrà bloccata.')">
+                    Fine Corsa
+                    </a>
+                {% else %}
+                    <div class="status-badge">🏁 Completata</div>
+                    <button disabled style="background-color: #ccc;">Archiviata</button>
+                {% endif %}
             </div>
-            {% endfor %}
-        </div>
+    {% endfor %}
+    </div>
 
         <a href="{{ url_for('dashboard') }}">Torna alla Dashboard</a>
     </div>
