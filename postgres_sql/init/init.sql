@@ -27,5 +27,6 @@ CREATE TABLE rides (
     bike_id VARCHAR(50) NOT NULL,
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP,
-    status VARCHAR(20) DEFAULT 'active'
+    status VARCHAR(20) DEFAULT 'active',
+    price NUMERIC(10,2)
 );

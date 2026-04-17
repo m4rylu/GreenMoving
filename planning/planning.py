@@ -1,6 +1,7 @@
 import time
 import configparser
 import psycopg2
+import random
 
 from datetime import datetime, timezone
 
@@ -137,9 +138,10 @@ def retrieve_bookings():
             if record_time > last_time:
                 user_id = record.values.get("user_id")
                 bike_id = record.values.get("bike_id")
+                price = record.values.get("price")
 
                 if not any(bike[0] == bike_id for bike in bookings):
-                    bookings.append((bike_id,user_id, record_time))
+                    bookings.append((bike_id,user_id, record_time, price))
 
                 if record_time > current_max_time:
                     current_max_time = record_time
@@ -201,6 +203,7 @@ def retrieve_bike_analysis():
 def bikes_planner():
     global bookings
     global bike_analysis
+    price = plan_bike_price()
 
     for bike_id in bike_analysis:
         event = bike_analysis[bike_id]
@@ -208,7 +211,6 @@ def bikes_planner():
         if event=="AVAILABLE":
             print("received available event")
             minutes = int(bikes[bike_id]["battery"] * 2)
-            price = 20
             point = Point("plan_bikes") \
                 .tag("bike_id", bike_id) \
                 .field("event", "AVAILABLE") \
@@ -224,6 +226,7 @@ def bikes_planner():
             for bike in bookings:
                 if bike[0] == bike_id:
                     user_id = bike[1]
+                    p = bike[3]
 
                 for station in stations:
                     for slot in stations[station]:
@@ -247,16 +250,17 @@ def bikes_planner():
 
                 sql_query = """
                     INSERT INTO rides (
-                        user_id, bike_id, start_time, end_time, status
+                        user_id, bike_id, start_time, end_time, status, price
                         )
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """
                 cur.execute(sql_query, (
                     user_id,
                     bike_id,
                     datetime.now(timezone.utc),
                     None,
-                    "active"
+                    "active",
+                    p
                 ))
                 conn.commit()
 
@@ -346,6 +350,51 @@ def plan_station_rate():
             for slot_name, rate_value in station_to_update.items():
                 point.field(slot_name, rate_value)
             write_api.write(bucket=BUCKET, record=point)
+
+def simulate_weather():
+    # These values can be directly read from external API
+    # but are simulate
+    conditions = ['Clear', 'Clouds', 'Rain', 'Thunderstorm']
+    return random.choice(conditions)
+
+
+def plan_bike_price():
+    base_price = 7.00
+    current_hour = datetime.now().hour
+    current_weather = simulate_weather()
+
+    query = """
+        SELECT 
+        COUNT(*) * 1.0 / NULLIF((SELECT COUNT(*) FROM rides), 0)
+        FROM rides 
+        WHERE EXTRACT(HOUR FROM start_time) = %s
+    """
+
+    cur.execute(query, (current_hour,))
+    media_prenotazioni = cur.fetchone()[0] or 0
+    conn.commit()
+
+    if media_prenotazioni > 0.10:
+        m_hour = 1.5
+    elif media_prenotazioni > 0.05:
+        m_hour = 1.2
+    else:  # Bassa richiesta
+        m_hour = 1.0
+
+    weather_multipliers = {
+        'Clear': 1.2,  # Tutti vogliono pedalare
+        'Clouds': 1.0,  # Normale
+        'Rain': 0.7,  # Sconto per invogliare
+        'Thunderstorm': 0.5  # Super sconto "coraggio"
+    }
+    m_weather = weather_multipliers.get(current_weather, 1.0)
+
+    final_price = base_price * m_hour * m_weather
+
+    return round(final_price, 2)
+
+
+
 
 
 def do_planning():

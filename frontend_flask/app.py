@@ -49,11 +49,12 @@ def token_required(f):
     return decorated
 
 
-def log_reservation_to_mqtt(user_id, bike_id):
+def log_reservation_to_mqtt(user_id, bike_id, price):
     payload = {
         "user_id": str(user_id),
         "bike_id": str(bike_id),
-        "event": "BOOKED"
+        "event": "BOOKED",
+        "price": float(price)
     }
 
     # Client MQTT "usa e getta" per la pubblicazione
@@ -158,10 +159,10 @@ def dashboard(current_user_id):
 
 # --- AGGIUNGI O MODIFICA QUESTE ROTTE ---
 
-@app.route('/reserve/<bike_id>', methods=['GET'])
+@app.route('/reserve/<bike_id>/<price>', methods=['GET'])
 @token_required
-def reserve_bike(current_user_id, bike_id):
-    log_reservation_to_mqtt(current_user_id, bike_id)
+def reserve_bike(current_user_id, bike_id, price):
+    log_reservation_to_mqtt(current_user_id, bike_id, price)
 
     return redirect(url_for('my_bookings', pending_bike_id=bike_id))
 
@@ -171,8 +172,6 @@ def reserve_bike(current_user_id, bike_id):
 def my_bookings(current_user_id):
     user = User.query.get(current_user_id)
 
-    # Prendiamo tutte le corse dell'utente ordinate dalla più recente
-    # Nota: forziamo str(current_user_id) per coerenza con la tabella VARCHAR
     user_rides = Ride.query.filter_by(user_id=str(current_user_id))\
                            .order_by(Ride.start_time.desc()).all()
 
