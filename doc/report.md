@@ -305,3 +305,6 @@ docker-compose up --build -d
 
 4. Select one of them for retrieving information about monitoring, availability and events.
 
+5. Navigate to http://localhost:5000/ where you will access to the Flask Web Application for booking bikes.
+
+![available_bikes](img/available_bikes.png)
