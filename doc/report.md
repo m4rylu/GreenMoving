@@ -54,7 +54,7 @@ We use a Sequence Diagram for the illustration of the data flow across the Edge,
 Also we provide some screenshot of Grafana dashboards used for fleet monitoring and checks of events
 | Monitoring Dashboard | Event Dashboard |
 | :---: | :---: |
-| <img src="img/monitoring_dashboard.png"> | <img src="img/event_dashboard.png"> |
+| <img src="img/monitoring_dashboard.png" width=300> | <img src="img/event_dashboard.png" width=300 >|
 
 ### Autonomous System
 A self-adaptive platform governed by the MAPE-K framework, designed to orchestrate an E-Bike sharing ecosystem autonomously. By continuously monitoring environmental and telemetry data, the system performs self-optimization, adjusting dynamic pricing and station energy allocation in real-time to maintain operational efficiency and service availability without human oversight.
@@ -177,7 +177,6 @@ The system monitors both the *context* (weather) and the *technical resources* (
 <div style="page-break-after: always;"></div>
 
 ### **System Architecture**
-![system architecture](img/sub_system_view.png)
 
 #### **MQTT**
 The system interacts with the environment using the MQTT protocol,.
