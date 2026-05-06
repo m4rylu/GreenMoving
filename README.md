@@ -30,7 +30,6 @@ docker-compose up --build -d
 ```
 
 3. Navigate to http://localhost:3000/ where you will have access to all dashboards
-![sequence diagram](doc/img/dashboard_list.png)
 
 4. Select one of them for retrieving information about monitoring and events.
 
